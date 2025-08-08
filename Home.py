@@ -25,7 +25,7 @@ st.markdown("""
 .stApp {background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%);}
 footer {visibility: hidden;}
 
-/* center st.image content and round a bit */
+/* Center any st.image and make it look nice */
 .stImage img {display:block; margin:auto; border-radius:12px;}
 
 /* Navbar */
@@ -40,7 +40,6 @@ footer {visibility: hidden;}
 .hero {padding: 10px 0 20px 0;}
 .kicker {letter-spacing:.06em; text-transform:uppercase; font-size:12px; color:#2563eb; font-weight:700;}
 .h1 {font-size:36px; line-height:1.2; font-weight:800; color:#0f172a; margin:6px 0;}
-.h1 span {color:#64748b; font-weight:800;}
 .hero-subgrid {display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 22px 0; font-size:14px; color:#334155;}
 
 /* Section header */
@@ -101,19 +100,26 @@ st.markdown("""
 
 # --- Utilities for slideshow ---
 def img_to_data_uri(p: Path) -> str:
-    data = p.read_bytes()
+    try:
+        data = p.read_bytes()
+    except Exception:
+        return ""
     b64 = base64.b64encode(data).decode("utf-8")
     ext = p.suffix.replace(".", "").lower()
     mime = "jpeg" if ext in ("jpg", "jpeg") else "png"
     return f"data:image/{mime};base64,{b64}"
 
-slide_imgs = [p for p in SLIDESHOW_IMAGES if p.exists()]
-if slide_imgs:
-    sources = [img_to_data_uri(p) for p in slide_imgs]
-    # Full-bleed rotating hero banner (JS + CSS live INSIDE the component)
+# Build a robust source list: carousel -> hero -> cards
+sources = [img_to_data_uri(p) for p in SLIDESHOW_IMAGES if p.exists()]
+fallbacks = [HERO_IMG, CARD_IMG1, CARD_IMG2, CARD_IMG3]
+if not sources:
+    sources = [img_to_data_uri(p) for p in fallbacks if p.exists()]
+
+# Always render a full-width banner so it never collapses
+if sources:
     st.components.v1.html(f"""
       <style>
-        /* Full-bleed wrapper: break out of Streamlit's column width */
+        /* Full-bleed wrapper */
         #hbwrap {{
           width: 100vw;
           position: relative;
@@ -124,53 +130,52 @@ if slide_imgs:
           overflow: hidden;
           box-shadow: 0 6px 18px rgba(0,0,0,.08);
         }}
-        #hbwrap img {{
+        #heroBanner {{
           width: 100%;
-          height: 420px;        /* banner height */
-          object-fit: cover;    /* fill width, crop vertical */
-          display: block;
+          height: 420px;
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
+        }}
+        @media (max-width: 900px) {{
+          #heroBanner {{ height: 300px; }}
         }}
       </style>
       <div id="hbwrap">
-        <img id="heroSlide" src="{sources[0]}" alt="hero">
+        <div id="heroBanner"></div>
       </div>
       <script>
         const imgs = {sources};
         let idx = 0;
-        setInterval(() => {{
-          idx = (idx + 1) % imgs.length;
-          const el = document.getElementById('heroSlide');
-          if (el) el.src = imgs[idx];
-        }}, 1000); // 1 second per image
+        const el = document.getElementById('heroBanner');
+        function show(i) {{ el.style.backgroundImage = `url('${{imgs[i]}}')`; }}
+        show(idx);
+        setInterval(() => {{ idx = (idx + 1) % imgs.length; show(idx); }}, 1000);
       </script>
     """, height=430)
 else:
-    # graceful fallback: show HERO_IMG as full-bleed if slideshow not found
-    if HERO_IMG.exists():
-        fallback_src = f"data:image/png;base64,{base64.b64encode(HERO_IMG.read_bytes()).decode()}"
-        st.components.v1.html(f"""
-          <style>
-            #hbwrap {{
-              width: 100vw;
-              position: relative;
-              left: 50%;
-              right: 50%;
-              margin-left: -50vw;
-              margin-right: -50vw;
-              overflow: hidden;
-              box-shadow: 0 6px 18px rgba(0,0,0,.08);
-            }}
-            #hbwrap img {{
-              width: 100%;
-              height: 420px;
-              object-fit: cover;
-              display: block;
-            }}
-          </style>
-          <div id="hbwrap">
-            <img src="{fallback_src}">
-          </div>
-        """, height=430)
+    # Gradient fallback (no files found on the server)
+    st.components.v1.html("""
+      <style>
+        #hbwrap {
+          width: 100vw;
+          position: relative;
+          left: 50%;
+          right: 50%;
+          margin-left: -50vw;
+          margin-right: -50vw;
+          overflow: hidden;
+          box-shadow: 0 6px 18px rgba(0,0,0,.08);
+        }
+        #heroBanner {
+          width: 100%;
+          height: 420px;
+          background: linear-gradient(120deg,#e9f3ff,#dbeafe,#ffffff);
+        }
+        @media (max-width: 900px) { #heroBanner { height: 300px; } }
+      </style>
+      <div id="hbwrap"><div id="heroBanner"></div></div>
+    """, height=430)
 
 st.write("")
 
