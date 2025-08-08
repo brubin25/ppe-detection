@@ -5,6 +5,7 @@ import time
 import uuid
 import mimetypes
 from datetime import datetime
+import random
 
 # ------------------------
 # PAGE CONFIG
@@ -45,8 +46,13 @@ st.markdown("""
     border-radius: 8px; padding: 0.6rem 1.2rem;
   }
   .stButton button:hover { background-color: #1e4ed8; }
-  .result-label { color:#64748b; font-size:14px; text-transform:uppercase; letter-spacing:.04em; }
-  .result-value { font-weight:700; color:#0f172a; }
+  .label { color:#64748b; font-size:13px; text-transform:uppercase; letter-spacing:.04em; }
+  .value { font-weight:700; color:#0f172a; font-size:16px; }
+  .chip {
+    display:inline-block; padding:4px 10px; border-radius:999px;
+    border:1px solid #e5e7eb; margin-right:6px; margin-bottom:6px; background:#fff;
+    font-size:12px; color:#0f172a;
+  }
 </style>
 """, unsafe_allow_html=True)
 
@@ -76,14 +82,30 @@ def guess_content_type(filename: str) -> str:
     return ctype or "application/octet-stream"
 
 def fake_rekognition_response(filename: str):
-    """Placeholder result to render the right-side panel nicely."""
-    # You can replace this with a poll to your pipeline / DynamoDB / SQS etc.
-    base = os.path.splitext(os.path.basename(filename))[0]
+    """
+    Placeholder shape for what a Rekognition/Lambda result might return.
+    Extend/replace this with your real JSON shape when you hook up to your backend.
+    """
+    base = os.path.splitext(os.path.basename(filename))[0] or "Unknown"
+    # Randomize a little for demo feel
+    all_items = ["Hard Hat", "Safety Vest", "Safety Glasses", "Gloves", "Ear Protection"]
+    missing = ["No Helmet", "No Safety Vest"]  # example violations
+    present = [i for i in all_items if ("No " + i.replace(" ", "")) not in missing]
+    confidence = round(random.uniform(92.5, 99.5), 1)
+
     return {
-        "employee": base.replace("_", " ").title() if base else "Unknown",
+        "employee_id": f"EMP-{random.randint(10000, 99999)}",
+        "name": base.replace("_", " ").title(),
+        "department": "Manufacturing",
+        "site": "Plant 3",
+        "shift": "Night",
+        "zone": "Line A",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "status": "Non-Compliant",
-        "violations": ["No Helmet", "No Safety Vest"],
+        "status": "Non-Compliant" if missing else "Compliant",
+        "violations": missing,
+        "ppe_detected": ["Safety Glasses", "Gloves"],  # example present PPE
+        "model_confidence": confidence,               # top-level overall score
+        "image_key": filename,
     }
 
 # ------------------------
@@ -113,7 +135,6 @@ with left:
 
     if file_bytes:
         st.markdown("**Preview**")
-        # No use_column_width → no deprecation warning. Fixed width keeps it “not too big”.
         st.image(file_bytes, caption=None, width=PREVIEW_WIDTH_PX)
 
         if st.button("⬆️ Upload to S3", type="primary"):
@@ -130,9 +151,8 @@ with left:
                             Body=file_bytes,
                             ContentType=guess_content_type(original_name),
                         )
-                    # Privacy-friendly success message
                     st.success("✅ Uploaded successfully. PPE analysis will start shortly.")
-                    # Placeholder “output/response” we can show at the right panel
+                    # Simulate/attach a detection response
                     result = fake_rekognition_response(original_name)
                 except Exception as e:
                     st.error(f"❌ Upload failed: {e}")
@@ -141,31 +161,70 @@ with left:
 
 with right:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("📝 Detection Result")
+    st.subheader("🧾 Detection Result")
 
     if result is None:
         st.caption("The detection summary will appear here after you upload a photo.")
     else:
-        # Employee + timestamp
-        c1, c2 = st.columns(2)
+        # --------- Top row: Identity ---------
+        c1, c2, c3 = st.columns([1.2, 1, 1])
         with c1:
-            st.markdown('<div class="result-label">Employee</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="result-value">{result["employee"]}</div>', unsafe_allow_html=True)
+            st.markdown('<div class="label">Employee Name</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("name","Unknown")}</div>', unsafe_allow_html=True)
         with c2:
-            st.markdown('<div class="result-label">Timestamp</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="result-value">{result["timestamp"]}</div>', unsafe_allow_html=True)
+            st.markdown('<div class="label">Employee ID</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("employee_id","—")}</div>', unsafe_allow_html=True)
+        with c3:
+            st.markdown('<div class="label">Department</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("department","—")}</div>', unsafe_allow_html=True)
+
+        # --------- 2nd row: Location/Time ---------
+        c4, c5, c6 = st.columns([1, 0.8, 1.2])
+        with c4:
+            st.markdown('<div class="label">Site</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("site","—")}</div>', unsafe_allow_html=True)
+        with c5:
+            st.markdown('<div class="label">Shift / Zone</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("shift","—")} / {result.get("zone","—")}</div>', unsafe_allow_html=True)
+        with c6:
+            st.markdown('<div class="label">Timestamp</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("timestamp","—")}</div>', unsafe_allow_html=True)
 
         st.divider()
-        # Status
-        st.markdown('<div class="result-label">Status</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="result-value">{result["status"]}</div>', unsafe_allow_html=True)
 
-        # Violations
-        if result.get("violations"):
-            st.markdown('<div class="result-label" style="margin-top:10px;">Violations</div>', unsafe_allow_html=True)
-            for v in result["violations"]:
+        # --------- Metrics row ---------
+        total_violations = len(result.get("violations", []))
+        total_detected   = len(result.get("ppe_detected", []))
+        confidence       = result.get("model_confidence", None)
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Violations", total_violations)
+        m2.metric("PPE Detected", total_detected)
+        if confidence is not None:
+            m3.metric("Model Confidence", f"{confidence}%")
+        else:
+            m3.metric("Model Confidence", "—")
+
+        st.divider()
+
+        # --------- Status & details ---------
+        st.markdown('<div class="label">Status</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="value">{result.get("status","—")}</div>', unsafe_allow_html=True)
+
+        # Violations list
+        violations = result.get("violations", [])
+        if violations:
+            st.markdown('<div class="label" style="margin-top:10px;">Violations</div>', unsafe_allow_html=True)
+            for v in violations:
                 st.markdown(f"- {v}")
         else:
             st.markdown("No violations detected ✅")
+
+        # PPE detected (chips)
+        detected = result.get("ppe_detected", [])
+        if detected:
+            st.markdown('<div class="label" style="margin-top:14px;">PPE Detected</div>', unsafe_allow_html=True)
+            chips = "".join([f'<span class="chip">{d}</span>' for d in detected])
+            st.markdown(chips, unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
