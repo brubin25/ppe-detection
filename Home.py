@@ -21,6 +21,7 @@ SLIDESHOW_IMAGES = [
 
 # Height for hero slideshow (change this to taste)
 HERO_HEIGHT_PX = 420
+HERO_WIDTH_PX = 1000
 
 # --- Global styles ---
 st.markdown("""
