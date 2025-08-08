@@ -19,6 +19,9 @@ SLIDESHOW_IMAGES = [
     Path("images/carousel3.png"),
 ]
 
+# Height for hero slideshow (change this to taste)
+HERO_HEIGHT_PX = 420
+
 # --- Global styles ---
 st.markdown("""
 <style>
@@ -47,27 +50,21 @@ footer {visibility: hidden;}
 .stButton>button, .stLinkButton>button {border-radius:10px; padding:8px 12px; font-weight:600;}
 .card-block {margin-bottom:8px;}
 
-/* ---------- FULL-BLEED HERO BANNER ---------- */
-.fullbleed-wrap {
-  position: relative;
-  left: 50%;
-  right: 50%;
-  margin-left: -50vw;
-  margin-right: -50vw;
-  width: 100vw;                /* spans the entire viewport width */
-}
-.fullbleed-banner {
-  width: 100vw;
-  height: min(48vh, 520px);    /* responsive height (reduce if you want it shorter) */
+/* HERO banner inside the Streamlit content width */
+.hero-banner {
+  width: 100%;
+  height: """ + f"{HERO_HEIGHT_PX}px" + """;
   overflow: hidden;
-  border-radius: 12px;         /* nice rounded corners */
+  border-radius: 12px;
   box-shadow: 0 6px 18px rgba(0,0,0,.12);
+  background: #fff;
+  margin: 8px 0 24px 0;
 }
-.fullbleed-banner img {
+.hero-banner img {
   width: 100%;
   height: 100%;
-  object-fit: cover;           /* fills banner without distortion */
   display: block;
+  object-fit: cover;  /* fills without distortion */
 }
 </style>
 """, unsafe_allow_html=True)
@@ -121,15 +118,13 @@ def img_to_data_uri(p: Path) -> str:
     mime = "jpeg" if ext in ("jpg", "jpeg") else "png"
     return f"data:image/{mime};base64,{b64}"
 
-# --- FULL-WIDTH SLIDESHOW BANNER (keeps all other sections intact) ---
+# --- HERO SLIDESHOW (content-width, always visible) ---
 slide_imgs = [p for p in SLIDESHOW_IMAGES if p.exists()]
 if slide_imgs:
     sources = [img_to_data_uri(p) for p in slide_imgs]
     st.components.v1.html(f"""
-      <div class="fullbleed-wrap">
-        <div class="fullbleed-banner">
-          <img id="heroSlide" src="{sources[0]}" alt="PPE slideshow image">
-        </div>
+      <div class="hero-banner">
+        <img id="heroSlide" src="{sources[0]}" alt="PPE slideshow">
       </div>
       <script>
         const imgs = {sources};
@@ -138,9 +133,9 @@ if slide_imgs:
           idx = (idx + 1) % imgs.length;
           const el = document.getElementById('heroSlide');
           if (el) el.src = imgs[idx];
-        }}, 1000); // 1s per image
+        }}, 1000);
       </script>
-    """, height=0)   # height 0 lets CSS control its size
+    """, height=HERO_HEIGHT_PX + 24)  # iframe height >= banner height so it displays
 else:
     st.info("Add images to `images/carousel1.png`, `images/carousel2.png`, `images/carousel3.png` to drive the slideshow.")
 
