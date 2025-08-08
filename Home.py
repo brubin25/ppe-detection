@@ -6,30 +6,25 @@ import base64
 # --- Page config ---
 st.set_page_config(page_title="PPE Safety Suite", page_icon="🦺", layout="wide")
 
-# --- Assets for cards (unchanged) ---
+# --- Assets ---
 HERO_IMG = Path("images/home1.png")
 CARD_IMG1 = Path("images/home1.png")
 CARD_IMG2 = Path("images/home2.png")
-CARD_IMG3 = Path("images/home3.png")  # Optional
-
-# --- Slideshow images (use your new set) ---
+CARD_IMG3 = Path("images/home3.png")
 SLIDESHOW_IMAGES = [
     Path("images/carousel1.png"),
     Path("images/carousel2.png"),
     Path("images/carousel3.png"),
 ]
 
-# --- Global styles ---
+# --- Styles ---
 st.markdown("""
 <style>
-/* Page background */
 .stApp {background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%);}
 footer {visibility: hidden;}
+.stImage img {display:block; margin:auto; border-radius:12px;}
 
-/* Keep all Streamlit images centered by default */
-.stImage img {display:block; margin-left:auto; margin-right:auto; border-radius:12px;}
-
-/* Top nav */
+/* Navbar */
 .navbar {display:flex; align-items:center; justify-content:space-between; padding:14px 10px;}
 .nav-left, .nav-right {display:flex; gap:22px; align-items:center;}
 .nav-link {font-weight:600; color:#0f172a; text-decoration:none;}
@@ -39,12 +34,26 @@ footer {visibility: hidden;}
 .chips {display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 6px 0;}
 .chip {display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; font-size:13px; background:white;}
 
-/* Hero text */
+/* Hero */
 .hero {padding: 10px 0 20px 0;}
 .kicker {letter-spacing:.06em; text-transform:uppercase; font-size:12px; color:#2563eb; font-weight:700;}
 .h1 {font-size:36px; line-height:1.2; font-weight:800; color:#0f172a; margin:6px 0;}
 .h1 span {color:#64748b; font-weight:800;}
 .hero-subgrid {display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 22px 0; font-size:14px; color:#334155;}
+
+/* Full-width hero image */
+.hero-image-wrap {
+  width: 100vw;
+  margin-left: -50px;  /* compensate Streamlit padding */
+  margin-right: -50px;
+  overflow: hidden;
+}
+.hero-image-wrap img {
+  width: 100%;
+  height: 380px;          /* adjust banner height */
+  object-fit: cover;      /* fill width, crop excess */
+  display: block;
+}
 
 /* Section header */
 .section-kicker {display:flex; align-items:center; gap:10px; color:#2563eb; font-weight:700; font-size:12px; text-transform:uppercase; margin-top:20px;}
@@ -58,26 +67,10 @@ footer {visibility: hidden;}
 .card-text {font-size:13px; color:#334155; line-height:1.55;}
 .card-cta {margin-top:12px;}
 .card-block {margin-bottom:8px;}
-
-/* Slideshow */
-.slideshow-wrap {
-  width: min(1100px, 92vw);
-  margin: 6px auto 24px auto;          /* centers it */
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 6px 18px rgba(0,0,0,.12);
-  background: #fff;
-}
-.slideshow-wrap img {
-  width: 100%;
-  height: 360px;                        /* keep a modest height */
-  object-fit: cover;                    /* neat crop, consistent height */
-  display: block;
-}
 </style>
 """, unsafe_allow_html=True)
 
-# --- NAVBAR ---
+# --- Navbar ---
 st.markdown("""
 <div class="navbar">
   <div class="nav-left">
@@ -92,7 +85,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- HERO TEXT ---
+# --- Chips & hero text ---
 st.markdown("""
 <div class="chips">
   <div class="chip">⚡ Real-time Processing</div>
@@ -104,7 +97,6 @@ st.markdown("""
 <section class="hero">
   <div class="kicker">Revolutionizing Safety with</div>
   <div class="h1">AI-Powered PPE Detection</div>
-
   <div class="hero-subgrid">
     <div>
       <b>Advanced AI Solutions</b>
@@ -118,132 +110,29 @@ st.markdown("""
 </section>
 """, unsafe_allow_html=True)
 
-# --- Utilities for slideshow ---
-def img_to_data_uri(p: Path) -> str:
-    data = p.read_bytes()
-    b64 = base64.b64encode(data).decode("utf-8")
-    ext = p.suffix.replace(".", "").lower()
-    mime = "jpeg" if ext in ("jpg", "jpeg") else "png"
-    return f"data:image/{mime};base64,{b64}"
+# --- Hero image full width ---
+if HERO_IMG.exists():
+    st.markdown(f"""
+    <div class="hero-image-wrap">
+      <img src="data:image/png;base64,{base64.b64encode(HERO_IMG.read_bytes()).decode()}">
+    </div>
+    """, unsafe_allow_html=True)
 
-slide_imgs = [p for p in SLIDESHOW_IMAGES if p.exists()]
-if slide_imgs:
-    sources = [img_to_data_uri(p) for p in slide_imgs]
-    st.components.v1.html(
-        f"""
-        <div class="slideshow-wrap">
-          <img id="heroSlide" src="{sources[0]}" alt="hero">
-        </div>
-        <script>
-          const imgs = {sources};
-          let idx = 0;
-          setInterval(() => {{
-            idx = (idx + 1) % imgs.length;
-            document.getElementById('heroSlide').src = imgs[idx];
-          }}, 1000);
-        </script>
-        """,
-        height=380,
-    )
-else:
-    # Nice centered fallback if carousel images aren't present in the hosted env
-    if HERO_IMG.exists():
-        c1, c2, c3 = st.columns([1, 2.2, 1])
-        with c2:
-            st.image(str(HERO_IMG), use_container_width=True)
-    else:
-        st.info("Add images to `images/carousel1.png`, `images/carousel2.png`, `images/carousel3.png` for the slideshow.")
-
-st.write("")
-
-# --- SECTION: Updates ---
+# --- Updates section ---
 st.markdown("""
 <div class="section-kicker">
   <span>AI Inspection Updates</span><span class="badge">New</span>
 </div>
 """, unsafe_allow_html=True)
 
-# Card 1
+# Example card
 with st.container():
-    col = st.columns([1.1, .9], vertical_alignment="center")
+    col = st.columns([1.1, .9])
     with col[0]:
         st.markdown('<div class="card-date">March 10, 2024</div>', unsafe_allow_html=True)
         st.markdown('<div class="card-title">Seamless Integration: AI & AWS Rekognition for PPE</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="card-text card-block">'
-            'Discover how our AI integrates effortlessly with AWS Rekognition to deliver '
-            'robust and accurate PPE detection at scale. The pipeline supports batch and real-time ingestion, '
-            'automatically routes events to your preferred queues, and enriches them with site, shift, and zone metadata.'
-            '</div>', unsafe_allow_html=True
-        )
-        st.markdown(
-            '<div class="card-text card-block">'
-            'Admins can review detections with side-by-side evidence frames, export annotated PDFs for audits, '
-            'and sync results to your safety system of record. Zero-downtime deploys and IaC modules keep operations simple.'
-            '</div>', unsafe_allow_html=True
-        )
+        st.markdown('<div class="card-text card-block">Our AI integrates with AWS Rekognition for scalable PPE detection...</div>', unsafe_allow_html=True)
         st.link_button("Learn More", "pages/04_About.py")
     with col[1]:
         if CARD_IMG1.exists():
             st.image(str(CARD_IMG1), use_container_width=True)
-
-# Card 2
-with st.container():
-    col = st.columns([1.1, .9], vertical_alignment="center")
-    with col[0]:
-        st.markdown('<div class="card-date">February 28, 2024</div>', unsafe_allow_html=True)
-        st.markdown('<div class="card-title">Real-Time PPE Detection: A New Era of Safety</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="card-text card-block">'
-            'Our vision models run on streams and images to identify helmets, vests, goggles, and masks—'
-            'even in low light and busy backgrounds. Latency is typically under a second, with configurable '
-            'thresholds to balance sensitivity and precision.'
-            '</div>', unsafe_allow_html=True
-        )
-        st.markdown(
-            '<div class="card-text card-block">'
-            'When a violation is detected, alerts are pushed to supervisors via email, SMS, or Slack '
-            'with cropped evidence and location context. Webhooks make it easy to trigger lockout/tagout or badge rules.'
-            '</div>', unsafe_allow_html=True
-        )
-        st.link_button("View Demo", "pages/01_Detect_PPE_Upload.py")
-    with col[1]:
-        if CARD_IMG2.exists():
-            st.image(str(CARD_IMG2), use_container_width=True)
-
-# Card 3
-with st.container():
-    col = st.columns([1.1, .9], vertical_alignment="center")
-    with col[0]:
-        st.markdown('<div class="card-date">January 15, 2024</div>', unsafe_allow_html=True)
-        st.markdown('<div class="card-title">Optimizing Workplace Safety with AI-Driven Insights</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="card-text card-block">'
-            'Dashboards summarize trends by site, line, contractor, and shift so leaders can target training where '
-            'it matters most. Drill-downs show repeat hotspots, top violation types, and mean-time-to-resolution.'
-            '</div>', unsafe_allow_html=True
-        )
-        st.markdown(
-            '<div class="card-text card-block">'
-            'Exports feed your BI stack, while scheduled reports keep supervisors in the loop. '
-            'All insights are privacy-aware and auditable, designed to meet enterprise governance standards.'
-            '</div>', unsafe_allow_html=True
-        )
-        st.link_button("Get Started", "pages/02_Employees_Master_List.py")
-    with col[1]:
-        if CARD_IMG3.exists():
-            st.image(str(CARD_IMG3), use_container_width=True)
-
-st.write("")
-
-# --- Quick links ---
-st.markdown("#### Quick links")
-ql1, ql2, ql3, ql4 = st.columns(4)
-with ql1:
-    st.page_link("pages/01_Detect_PPE_Upload.py", label="Detect PPE (Upload)", icon="⬆️")
-with ql2:
-    st.page_link("pages/02_Employees_Master_List.py", label="Employees (Master List)", icon="👥")
-with ql3:
-    st.page_link("pages/03_Violations.py", label="Employees Violations", icon="⚠️")
-with ql4:
-    st.page_link("pages/04_About.py", label="About", icon="ℹ️")
