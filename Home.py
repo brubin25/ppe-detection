@@ -24,36 +24,51 @@ st.markdown("""
 <style>
 .stApp {background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%);}
 footer {visibility: hidden;}
-
-/* Center any st.image and make it look nice */
-.stImage img {display:block; margin:auto; border-radius:12px;}
-
-/* Navbar */
 .navbar {display:flex; align-items:center; justify-content:space-between; padding:14px 10px;}
 .nav-left, .nav-right {display:flex; gap:22px; align-items:center;}
 .nav-link {font-weight:600; color:#0f172a; text-decoration:none;}
 .nav-cta {background:#2563eb; color:white !important; padding:8px 14px; border-radius:10px; font-weight:600; text-decoration:none;}
-
-/* Chips / hero text */
 .chips {display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 6px 0;}
 .chip {display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; font-size:13px; background:white;}
 .hero {padding: 10px 0 20px 0;}
 .kicker {letter-spacing:.06em; text-transform:uppercase; font-size:12px; color:#2563eb; font-weight:700;}
 .h1 {font-size:36px; line-height:1.2; font-weight:800; color:#0f172a; margin:6px 0;}
+.h1 span {color:#64748b; font-weight:800;}
 .hero-subgrid {display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 22px 0; font-size:14px; color:#334155;}
-
-/* Section header */
 .section-kicker {display:flex; align-items:center; gap:10px; color:#2563eb; font-weight:700; font-size:12px; text-transform:uppercase; margin-top:20px;}
 .badge {padding:2px 8px; background:#e0ecff; border-radius:999px; font-size:11px; color:#1e40af;}
-
-/* Cards */
 .card {display:grid; grid-template-columns:1.1fr .9fr; gap:26px; padding:22px; border:1px solid #e5e7eb; border-radius:16px; background:white;}
 .card + .card {margin-top:16px;}
 .card-date {font-size:11px; color:#64748b; text-transform:uppercase; margin-bottom:6px;}
 .card-title {font-size:18px; font-weight:800; margin:0 0 6px 0; color:#0f172a;}
 .card-text {font-size:13px; color:#334155; line-height:1.55;}
 .card-cta {margin-top:12px;}
+.card-img {border-radius:12px; overflow:hidden;}
+.stButton>button, .stLinkButton>button {border-radius:10px; padding:8px 12px; font-weight:600;}
 .card-block {margin-bottom:8px;}
+
+/* ---------- FULL-BLEED HERO BANNER ---------- */
+.fullbleed-wrap {
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  width: 100vw;                /* spans the entire viewport width */
+}
+.fullbleed-banner {
+  width: 100vw;
+  height: min(48vh, 520px);    /* responsive height (reduce if you want it shorter) */
+  overflow: hidden;
+  border-radius: 12px;         /* nice rounded corners */
+  box-shadow: 0 6px 18px rgba(0,0,0,.12);
+}
+.fullbleed-banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;           /* fills banner without distortion */
+  display: block;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -100,82 +115,34 @@ st.markdown("""
 
 # --- Utilities for slideshow ---
 def img_to_data_uri(p: Path) -> str:
-    try:
-        data = p.read_bytes()
-    except Exception:
-        return ""
+    data = p.read_bytes()
     b64 = base64.b64encode(data).decode("utf-8")
     ext = p.suffix.replace(".", "").lower()
     mime = "jpeg" if ext in ("jpg", "jpeg") else "png"
     return f"data:image/{mime};base64,{b64}"
 
-# Build a robust source list: carousel -> hero -> cards
-sources = [img_to_data_uri(p) for p in SLIDESHOW_IMAGES if p.exists()]
-fallbacks = [HERO_IMG, CARD_IMG1, CARD_IMG2, CARD_IMG3]
-if not sources:
-    sources = [img_to_data_uri(p) for p in fallbacks if p.exists()]
-
-# Always render a full-width banner so it never collapses
-if sources:
+# --- FULL-WIDTH SLIDESHOW BANNER (keeps all other sections intact) ---
+slide_imgs = [p for p in SLIDESHOW_IMAGES if p.exists()]
+if slide_imgs:
+    sources = [img_to_data_uri(p) for p in slide_imgs]
     st.components.v1.html(f"""
-      <style>
-        /* Full-bleed wrapper */
-        #hbwrap {{
-          width: 100vw;
-          position: relative;
-          left: 50%;
-          right: 50%;
-          margin-left: -50vw;
-          margin-right: -50vw;
-          overflow: hidden;
-          box-shadow: 0 6px 18px rgba(0,0,0,.08);
-        }}
-        #heroBanner {{
-          width: 100%;
-          height: 420px;
-          background-size: cover;
-          background-position: center;
-          background-repeat: no-repeat;
-        }}
-        @media (max-width: 900px) {{
-          #heroBanner {{ height: 300px; }}
-        }}
-      </style>
-      <div id="hbwrap">
-        <div id="heroBanner"></div>
+      <div class="fullbleed-wrap">
+        <div class="fullbleed-banner">
+          <img id="heroSlide" src="{sources[0]}" alt="PPE slideshow image">
+        </div>
       </div>
       <script>
         const imgs = {sources};
         let idx = 0;
-        const el = document.getElementById('heroBanner');
-        function show(i) {{ el.style.backgroundImage = `url('${{imgs[i]}}')`; }}
-        show(idx);
-        setInterval(() => {{ idx = (idx + 1) % imgs.length; show(idx); }}, 1000);
+        setInterval(() => {{
+          idx = (idx + 1) % imgs.length;
+          const el = document.getElementById('heroSlide');
+          if (el) el.src = imgs[idx];
+        }}, 1000); // 1s per image
       </script>
-    """, height=430)
+    """, height=0)   # height 0 lets CSS control its size
 else:
-    # Gradient fallback (no files found on the server)
-    st.components.v1.html("""
-      <style>
-        #hbwrap {
-          width: 100vw;
-          position: relative;
-          left: 50%;
-          right: 50%;
-          margin-left: -50vw;
-          margin-right: -50vw;
-          overflow: hidden;
-          box-shadow: 0 6px 18px rgba(0,0,0,.08);
-        }
-        #heroBanner {
-          width: 100%;
-          height: 420px;
-          background: linear-gradient(120deg,#e9f3ff,#dbeafe,#ffffff);
-        }
-        @media (max-width: 900px) { #heroBanner { height: 300px; } }
-      </style>
-      <div id="hbwrap"><div id="heroBanner"></div></div>
-    """, height=430)
+    st.info("Add images to `images/carousel1.png`, `images/carousel2.png`, `images/carousel3.png` to drive the slideshow.")
 
 st.write("")
 
