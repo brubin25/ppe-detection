@@ -19,54 +19,63 @@ SLIDESHOW_IMAGES = [
     Path("images/carousel3.png"),
 ]
 
-# Height for hero slideshow (change this to taste)
+# Height for hero slideshow
 HERO_HEIGHT_PX = 420
-HERO_WIDTH_PX = 5000
 
-# --- Global styles ---
-st.markdown("""
+# --- Global styles (ADDED full-bleed hero styles) ---
+st.markdown(f"""
 <style>
-.stApp {background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%);}
-footer {visibility: hidden;}
-.navbar {display:flex; align-items:center; justify-content:space-between; padding:14px 10px;}
-.nav-left, .nav-right {display:flex; gap:22px; align-items:center;}
-.nav-link {font-weight:600; color:#0f172a; text-decoration:none;}
-.nav-cta {background:#2563eb; color:white !important; padding:8px 14px; border-radius:10px; font-weight:600; text-decoration:none;}
-.chips {display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 6px 0;}
-.chip {display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; font-size:13px; background:white;}
-.hero {padding: 10px 0 20px 0;}
-.kicker {letter-spacing:.06em; text-transform:uppercase; font-size:12px; color:#2563eb; font-weight:700;}
-.h1 {font-size:36px; line-height:1.2; font-weight:800; color:#0f172a; margin:6px 0;}
-.h1 span {color:#64748b; font-weight:800;}
-.hero-subgrid {display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 22px 0; font-size:14px; color:#334155;}
-.section-kicker {display:flex; align-items:center; gap:10px; color:#2563eb; font-weight:700; font-size:12px; text-transform:uppercase; margin-top:20px;}
-.badge {padding:2px 8px; background:#e0ecff; border-radius:999px; font-size:11px; color:#1e40af;}
-.card {display:grid; grid-template-columns:1.1fr .9fr; gap:26px; padding:22px; border:1px solid #e5e7eb; border-radius:16px; background:white;}
-.card + .card {margin-top:16px;}
-.card-date {font-size:11px; color:#64748b; text-transform:uppercase; margin-bottom:6px;}
-.card-title {font-size:18px; font-weight:800; margin:0 0 6px 0; color:#0f172a;}
-.card-text {font-size:13px; color:#334155; line-height:1.55;}
-.card-cta {margin-top:12px;}
-.card-img {border-radius:12px; overflow:hidden;}
-.stButton>button, .stLinkButton>button {border-radius:10px; padding:8px 12px; font-weight:600;}
-.card-block {margin-bottom:8px;}
+.stApp {{
+  background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%);
+}}
+footer {{visibility: hidden;}}
+.navbar {{display:flex; align-items:center; justify-content:space-between; padding:14px 10px;}}
+.nav-left, .nav-right {{display:flex; gap:22px; align-items:center;}}
+.nav-link {{font-weight:600; color:#0f172a; text-decoration:none;}}
+.nav-cta {{background:#2563eb; color:white !important; padding:8px 14px; border-radius:10px; font-weight:600; text-decoration:none;}}
+.chips {{display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 6px 0;}}
+.chip {{display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; font-size:13px; background:white;}}
+.hero {{padding: 10px 0 20px 0;}}
+.kicker {{letter-spacing:.06em; text-transform:uppercase; font-size:12px; color:#2563eb; font-weight:700;}}
+.h1 {{font-size:36px; line-height:1.2; font-weight:800; color:#0f172a; margin:6px 0;}}
+.h1 span {{color:#64748b; font-weight:800;}}
+.hero-subgrid {{display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 22px 0; font-size:14px; color:#334155;}}
+.section-kicker {{display:flex; align-items:center; gap:10px; color:#2563eb; font-weight:700; font-size:12px; text-transform:uppercase; margin-top:20px;}}
+.badge {{padding:2px 8px; background:#e0ecff; border-radius:999px; font-size:11px; color:#1e40af;}}
+.card {{display:grid; grid-template-columns:1.1fr .9fr; gap:26px; padding:22px; border:1px solid #e5e7eb; border-radius:16px; background:white;}}
+.card + .card {{margin-top:16px;}}
+.card-date {{font-size:11px; color:#64748b; text-transform:uppercase; margin-bottom:6px;}}
+.card-title {{font-size:18px; font-weight:800; margin:0 0 6px 0; color:#0f172a;}}
+.card-text {{font-size:13px; color:#334155; line-height:1.55;}}
+.card-cta {{margin-top:12px;}}
+.card-img {{border-radius:12px; overflow:hidden;}}
+.stButton>button, .stLinkButton>button {{border-radius:10px; padding:8px 12px; font-weight:600;}}
+.card-block {{margin-bottom:8px;}}
 
-/* HERO banner inside the Streamlit content width */
-.hero-banner {
-  width: 100%;
-  height: """ + f"{HERO_HEIGHT_PX}px" + """;
+/* ---- FULL-BLEED HERO ----
+   This breaks the hero out of Streamlit's content column so it spans the full viewport width. */
+.full-bleed {{
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+}}
+.hero-bleed {{
+  width: 100vw;
+  height: {HERO_HEIGHT_PX}px;
   overflow: hidden;
   border-radius: 12px;
   box-shadow: 0 6px 18px rgba(0,0,0,.12);
   background: #fff;
-  margin: 8px 0 24px 0;
-}
-.hero-banner img {
+}}
+.hero-bleed img {{
   width: 100%;
   height: 100%;
+  object-fit: cover;
   display: block;
-  object-fit: cover;  /* fills without distortion */
-}
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -119,13 +128,15 @@ def img_to_data_uri(p: Path) -> str:
     mime = "jpeg" if ext in ("jpg", "jpeg") else "png"
     return f"data:image/{mime};base64,{b64}"
 
-# --- HERO SLIDESHOW (content-width, always visible) ---
+# --- FULL-BLEED HERO SLIDESHOW ---
 slide_imgs = [p for p in SLIDESHOW_IMAGES if p.exists()]
 if slide_imgs:
     sources = [img_to_data_uri(p) for p in slide_imgs]
     st.components.v1.html(f"""
-      <div class="hero-banner">
-        <img id="heroSlide" src="{sources[0]}" alt="PPE slideshow">
+      <div class="full-bleed">
+        <div class="hero-bleed">
+          <img id="heroSlide" src="{sources[0]}" alt="PPE slideshow">
+        </div>
       </div>
       <script>
         const imgs = {sources};
@@ -136,7 +147,7 @@ if slide_imgs:
           if (el) el.src = imgs[idx];
         }}, 1000);
       </script>
-    """, height=HERO_HEIGHT_PX + 24)  # iframe height >= banner height so it displays
+    """, height=HERO_HEIGHT_PX + 4)  # iframe height >= hero height so it displays
 else:
     st.info("Add images to `images/carousel1.png`, `images/carousel2.png`, `images/carousel3.png` to drive the slideshow.")
 
