@@ -22,38 +22,58 @@ SLIDESHOW_IMAGES = [
 # --- Global styles ---
 st.markdown("""
 <style>
+/* Page background */
 .stApp {background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%);}
 footer {visibility: hidden;}
+
+/* Keep all Streamlit images centered by default */
+.stImage img {display:block; margin-left:auto; margin-right:auto; border-radius:12px;}
+
+/* Top nav */
 .navbar {display:flex; align-items:center; justify-content:space-between; padding:14px 10px;}
 .nav-left, .nav-right {display:flex; gap:22px; align-items:center;}
 .nav-link {font-weight:600; color:#0f172a; text-decoration:none;}
-.nav-cta {
-    background:#2563eb;
-    color:white !important;
-    padding:8px 14px;
-    border-radius:10px;
-    font-weight:600;
-    text-decoration:none;
-}
+.nav-cta {background:#2563eb; color:white !important; padding:8px 14px; border-radius:10px; font-weight:600; text-decoration:none;}
+
+/* Chips */
 .chips {display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 6px 0;}
 .chip {display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; font-size:13px; background:white;}
+
+/* Hero text */
 .hero {padding: 10px 0 20px 0;}
 .kicker {letter-spacing:.06em; text-transform:uppercase; font-size:12px; color:#2563eb; font-weight:700;}
 .h1 {font-size:36px; line-height:1.2; font-weight:800; color:#0f172a; margin:6px 0;}
 .h1 span {color:#64748b; font-weight:800;}
 .hero-subgrid {display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 22px 0; font-size:14px; color:#334155;}
+
+/* Section header */
 .section-kicker {display:flex; align-items:center; gap:10px; color:#2563eb; font-weight:700; font-size:12px; text-transform:uppercase; margin-top:20px;}
 .badge {padding:2px 8px; background:#e0ecff; border-radius:999px; font-size:11px; color:#1e40af;}
+
+/* Cards */
 .card {display:grid; grid-template-columns:1.1fr .9fr; gap:26px; padding:22px; border:1px solid #e5e7eb; border-radius:16px; background:white;}
 .card + .card {margin-top:16px;}
 .card-date {font-size:11px; color:#64748b; text-transform:uppercase; margin-bottom:6px;}
 .card-title {font-size:18px; font-weight:800; margin:0 0 6px 0; color:#0f172a;}
 .card-text {font-size:13px; color:#334155; line-height:1.55;}
 .card-cta {margin-top:12px;}
-.card-img {border-radius:12px; overflow:hidden;}
-.stButton>button, .stLinkButton>button {border-radius:10px; padding:8px 12px; font-weight:600;}
-/* tighten the vertical whitespace under each card */
 .card-block {margin-bottom:8px;}
+
+/* Slideshow */
+.slideshow-wrap {
+  width: min(1100px, 92vw);
+  margin: 6px auto 24px auto;          /* centers it */
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0,0,0,.12);
+  background: #fff;
+}
+.slideshow-wrap img {
+  width: 100%;
+  height: 360px;                        /* keep a modest height */
+  object-fit: cover;                    /* neat crop, consistent height */
+  display: block;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -109,38 +129,30 @@ def img_to_data_uri(p: Path) -> str:
 slide_imgs = [p for p in SLIDESHOW_IMAGES if p.exists()]
 if slide_imgs:
     sources = [img_to_data_uri(p) for p in slide_imgs]
-    # Slender height for hero
-    st.components.v1.html(f"""
-    <style>
-      .slideshow-wrap {{
-        width: min(1000px, 92vw);
-        margin: 6px auto 24px auto;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 6px 18px rgba(0,0,0,.12);
-        background: #fff;
-      }}
-      .slideshow-wrap img {{
-        width: 100%;
-        height: 360px;       /* reduced height */
-        object-fit: cover;   /* show a nice crop but keep layout tidy */
-        display: block;
-      }}
-    </style>
-    <div class="slideshow-wrap">
-      <img id="heroSlide" src="{sources[0]}" alt="hero">
-    </div>
-    <script>
-      const imgs = {sources};
-      let idx = 0;
-      setInterval(() => {{
-        idx = (idx + 1) % imgs.length;
-        document.getElementById('heroSlide').src = imgs[idx];
-      }}, 1000); // 1 second per image
-    </script>
-    """, height=380)
+    st.components.v1.html(
+        f"""
+        <div class="slideshow-wrap">
+          <img id="heroSlide" src="{sources[0]}" alt="hero">
+        </div>
+        <script>
+          const imgs = {sources};
+          let idx = 0;
+          setInterval(() => {{
+            idx = (idx + 1) % imgs.length;
+            document.getElementById('heroSlide').src = imgs[idx];
+          }}, 1000);
+        </script>
+        """,
+        height=380,
+    )
 else:
-    st.info("Add images to `images/carousel1.png`, `images/carousel2.png`, `images/carousel3.png` to drive the slideshow.")
+    # Nice centered fallback if carousel images aren't present in the hosted env
+    if HERO_IMG.exists():
+        c1, c2, c3 = st.columns([1, 2.2, 1])
+        with c2:
+            st.image(str(HERO_IMG), use_container_width=True)
+    else:
+        st.info("Add images to `images/carousel1.png`, `images/carousel2.png`, `images/carousel3.png` for the slideshow.")
 
 st.write("")
 
@@ -173,7 +185,7 @@ with st.container():
         st.link_button("Learn More", "pages/04_About.py")
     with col[1]:
         if CARD_IMG1.exists():
-            st.image(str(CARD_IMG1), use_column_width=True)
+            st.image(str(CARD_IMG1), use_container_width=True)
 
 # Card 2
 with st.container():
@@ -197,7 +209,7 @@ with st.container():
         st.link_button("View Demo", "pages/01_Detect_PPE_Upload.py")
     with col[1]:
         if CARD_IMG2.exists():
-            st.image(str(CARD_IMG2), use_column_width=True)
+            st.image(str(CARD_IMG2), use_container_width=True)
 
 # Card 3
 with st.container():
@@ -220,7 +232,7 @@ with st.container():
         st.link_button("Get Started", "pages/02_Employees_Master_List.py")
     with col[1]:
         if CARD_IMG3.exists():
-            st.image(str(CARD_IMG3), use_column_width=True)
+            st.image(str(CARD_IMG3), use_container_width=True)
 
 st.write("")
 
