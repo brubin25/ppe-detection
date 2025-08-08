@@ -34,33 +34,14 @@ footer {visibility: hidden;}
 .nav-link {font-weight:600; color:#0f172a; text-decoration:none;}
 .nav-cta {background:#2563eb; color:white !important; padding:8px 14px; border-radius:10px; font-weight:600; text-decoration:none;}
 
-/* Chips */
+/* Chips / hero text */
 .chips {display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 6px 0;}
 .chip {display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; font-size:13px; background:white;}
-
-/* Hero text */
 .hero {padding: 10px 0 20px 0;}
 .kicker {letter-spacing:.06em; text-transform:uppercase; font-size:12px; color:#2563eb; font-weight:700;}
 .h1 {font-size:36px; line-height:1.2; font-weight:800; color:#0f172a; margin:6px 0;}
 .h1 span {color:#64748b; font-weight:800;}
 .hero-subgrid {display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 22px 0; font-size:14px; color:#334155;}
-
-/* FULL-WIDTH HERO SLIDESHOW */
-.hero-banner {
-  /* make it span the full viewport width regardless of Streamlit page padding */
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
-  overflow: hidden;
-  border-radius: 0; /* full bleed */
-  box-shadow: 0 6px 18px rgba(0,0,0,.08);
-}
-.hero-banner img {
-  width: 100%;
-  height: 380px;     /* banner height — tweak if you want taller/shorter */
-  object-fit: cover; /* fill horizontally, crop excess vertically */
-  display: block;
-}
 
 /* Section header */
 .section-kicker {display:flex; align-items:center; gap:10px; color:#2563eb; font-weight:700; font-size:12px; text-transform:uppercase; margin-top:20px;}
@@ -129,9 +110,28 @@ def img_to_data_uri(p: Path) -> str:
 slide_imgs = [p for p in SLIDESHOW_IMAGES if p.exists()]
 if slide_imgs:
     sources = [img_to_data_uri(p) for p in slide_imgs]
-    # Full-width rotating banner (keeps all your other sections untouched)
+    # Full-bleed rotating hero banner (JS + CSS live INSIDE the component)
     st.components.v1.html(f"""
-      <div class="hero-banner">
+      <style>
+        /* Full-bleed wrapper: break out of Streamlit's column width */
+        #hbwrap {{
+          width: 100vw;
+          position: relative;
+          left: 50%;
+          right: 50%;
+          margin-left: -50vw;
+          margin-right: -50vw;
+          overflow: hidden;
+          box-shadow: 0 6px 18px rgba(0,0,0,.08);
+        }}
+        #hbwrap img {{
+          width: 100%;
+          height: 420px;        /* banner height */
+          object-fit: cover;    /* fill width, crop vertical */
+          display: block;
+        }}
+      </style>
+      <div id="hbwrap">
         <img id="heroSlide" src="{sources[0]}" alt="hero">
       </div>
       <script>
@@ -143,15 +143,34 @@ if slide_imgs:
           if (el) el.src = imgs[idx];
         }}, 1000); // 1 second per image
       </script>
-    """, height=380)
+    """, height=430)
 else:
-    # graceful fallback: show HERO_IMG as a full-width banner if slideshow files missing
+    # graceful fallback: show HERO_IMG as full-bleed if slideshow not found
     if HERO_IMG.exists():
-        st.markdown(f"""
-          <div class="hero-banner">
-            <img src="data:image/png;base64,{base64.b64encode(HERO_IMG.read_bytes()).decode()}">
+        fallback_src = f"data:image/png;base64,{base64.b64encode(HERO_IMG.read_bytes()).decode()}"
+        st.components.v1.html(f"""
+          <style>
+            #hbwrap {{
+              width: 100vw;
+              position: relative;
+              left: 50%;
+              right: 50%;
+              margin-left: -50vw;
+              margin-right: -50vw;
+              overflow: hidden;
+              box-shadow: 0 6px 18px rgba(0,0,0,.08);
+            }}
+            #hbwrap img {{
+              width: 100%;
+              height: 420px;
+              object-fit: cover;
+              display: block;
+            }}
+          </style>
+          <div id="hbwrap">
+            <img src="{fallback_src}">
           </div>
-        """, unsafe_allow_html=True)
+        """, height=430)
 
 st.write("")
 
