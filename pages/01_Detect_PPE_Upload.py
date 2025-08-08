@@ -12,49 +12,52 @@ from datetime import datetime
 st.set_page_config(page_title="Detect PPE (Upload)", page_icon="🦺", layout="wide")
 
 # ------------------------
-# AWS CONFIG
+# AWS CONFIG — like your reference (secrets with env fallbacks)
 # ------------------------
 AWS_ACCESS_KEY = st.secrets.get("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID", ""))
 AWS_SECRET_KEY = st.secrets.get("AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", ""))
-REGION = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
+REGION        = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
 
-BUCKET_NAME = "ppe-detection-input"
+BUCKET_NAME   = "ppe-detection-input"
 UPLOAD_PREFIX = "uploads/"
 
 # ------------------------
 # CONSTANTS
 # ------------------------
-PREVIEW_MAX_WIDTH_PX = 320  # About 1/4 size of previous image
+PREVIEW_WIDTH_PX = 380  # ~¼ of a wide monitor
 
 # ------------------------
 # STYLES
 # ------------------------
 st.markdown("""
-    <style>
-        .stApp {
-            background: linear-gradient(135deg, #f5f9ff, #ffffff);
-        }
-        .upload-box {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        }
-        .stButton button {
-            background-color: #2563eb;
-            color: white;
-            font-weight: 600;
-            border-radius: 8px;
-            padding: 0.6rem 1.2rem;
-        }
-        .stButton button:hover {
-            background-color: #1e4ed8;
-        }
-    </style>
+<style>
+  .stApp { background: linear-gradient(135deg, #f5f9ff, #ffffff); }
+  .upload-box {
+    background: white; padding: 20px; border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+  .panel {
+    background: white; padding: 20px; border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+  .stButton button {
+    background-color: #2563eb; color: white; font-weight: 600;
+    border-radius: 8px; padding: 0.6rem 1.2rem;
+  }
+  .stButton button:hover { background-color: #1e4ed8; }
+  .result-label { color:#64748b; font-size:14px; text-transform:uppercase; letter-spacing:.04em; }
+  .result-value { font-weight:700; color:#0f172a; }
+</style>
 """, unsafe_allow_html=True)
 
 # ------------------------
-# FUNCTIONS
+# HEADER
+# ------------------------
+st.title("🦺 Detect PPE (Upload)")
+st.caption("Upload a photo and see the detection result appear on the right.")
+
+# ------------------------
+# HELPERS
 # ------------------------
 def s3_client():
     return boto3.client(
@@ -72,24 +75,26 @@ def guess_content_type(filename: str) -> str:
     ctype, _ = mimetypes.guess_type(filename)
     return ctype or "application/octet-stream"
 
-# ------------------------
-# STATE INIT
-# ------------------------
-if "ppe_result" not in st.session_state:
-    st.session_state["ppe_result"] = None
+def fake_rekognition_response(filename: str):
+    """Placeholder result to render the right-side panel nicely."""
+    # You can replace this with a poll to your pipeline / DynamoDB / SQS etc.
+    base = os.path.splitext(os.path.basename(filename))[0]
+    return {
+        "employee": base.replace("_", " ").title() if base else "Unknown",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "Non-Compliant",
+        "violations": ["No Helmet", "No Safety Vest"],
+    }
 
 # ------------------------
-# HEADER
+# LAYOUT: LEFT (upload + preview) | RIGHT (result)
 # ------------------------
-st.title("🦺 Detect PPE (Upload)")
-st.caption("Upload an image to check compliance using AWS Rekognition.")
+left, right = st.columns([6, 5])
 
-# ------------------------
-# LAYOUT
-# ------------------------
-col1, col2 = st.columns([1.5, 1])  # Left: Upload; Right: Results
+# A mutable placeholder for the result dictionary
+result = None
 
-with col1:
+with left:
     st.markdown('<div class="upload-box">', unsafe_allow_html=True)
 
     uploaded_file = st.file_uploader("📂 Choose an image", type=["jpg", "jpeg", "png"])
@@ -107,14 +112,17 @@ with col1:
         original_name = uploaded_file.name
 
     if file_bytes:
-        st.image(file_bytes, caption="Preview", width=PREVIEW_MAX_WIDTH_PX)
-        if st.button("⬆️ Upload to S3"):
+        st.markdown("**Preview**")
+        # No use_column_width → no deprecation warning. Fixed width keeps it “not too big”.
+        st.image(file_bytes, caption=None, width=PREVIEW_WIDTH_PX)
+
+        if st.button("⬆️ Upload to S3", type="primary"):
             if not AWS_ACCESS_KEY or not AWS_SECRET_KEY:
                 st.error("❌ AWS credentials not found. Please add them in `.streamlit/secrets.toml`.")
             else:
                 key = unique_key(original_name)
                 try:
-                    with st.spinner("Uploading to S3…"):
+                    with st.spinner("Uploading…"):
                         s3 = s3_client()
                         s3.put_object(
                             Bucket=BUCKET_NAME,
@@ -122,32 +130,42 @@ with col1:
                             Body=file_bytes,
                             ContentType=guess_content_type(original_name),
                         )
-                    st.success(f"✅ Uploaded to s3://{BUCKET_NAME}/{key}")
-                    st.info("Your Lambda function will now process PPE detection.")
-
-                    # Mock response (replace with real Rekognition/Lambda call)
-                    st.session_state["ppe_result"] = {
-                        "employee_name": "John Doe",
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "violations": ["No Helmet", "No Safety Vest"],
-                        "status": "Non-Compliant"
-                    }
-
+                    # Privacy-friendly success message
+                    st.success("✅ Uploaded successfully. PPE analysis will start shortly.")
+                    # Placeholder “output/response” we can show at the right panel
+                    result = fake_rekognition_response(original_name)
                 except Exception as e:
                     st.error(f"❌ Upload failed: {e}")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-with col2:
-    st.subheader("📋 Detection Result")
-    if st.session_state["ppe_result"]:
-        res = st.session_state["ppe_result"]
-        st.write(f"**Employee:** {res['employee_name']}")
-        st.write(f"**Timestamp:** {res['timestamp']}")
-        st.write(f"**Status:** {res['status']}")
-        if res["violations"]:
-            st.write("**Violations:**")
-            for v in res["violations"]:
-                st.write(f"- {v}")
+with right:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.subheader("📝 Detection Result")
+
+    if result is None:
+        st.caption("The detection summary will appear here after you upload a photo.")
     else:
-        st.info("No detection result yet. Upload an image to see details.")
+        # Employee + timestamp
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown('<div class="result-label">Employee</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="result-value">{result["employee"]}</div>', unsafe_allow_html=True)
+        with c2:
+            st.markdown('<div class="result-label">Timestamp</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="result-value">{result["timestamp"]}</div>', unsafe_allow_html=True)
+
+        st.divider()
+        # Status
+        st.markdown('<div class="result-label">Status</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="result-value">{result["status"]}</div>', unsafe_allow_html=True)
+
+        # Violations
+        if result.get("violations"):
+            st.markdown('<div class="result-label" style="margin-top:10px;">Violations</div>', unsafe_allow_html=True)
+            for v in result["violations"]:
+                st.markdown(f"- {v}")
+        else:
+            st.markdown("No violations detected ✅")
+
+    st.markdown('</div>', unsafe_allow_html=True)
