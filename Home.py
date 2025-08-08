@@ -19,20 +19,20 @@ SLIDESHOW_IMAGES = [
     Path("images/carousel3.png"),
 ]
 
-# Height for hero slideshow
+# Height for hero slideshow (adjust to taste)
 HERO_HEIGHT_PX = 420
 
-# --- Global styles (ADDED full-bleed hero styles) ---
+# --- Global styles (adds full-bleed + hero CSS) ---
 st.markdown(f"""
 <style>
-.stApp {{
-  background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%);
-}}
-footer {{visibility: hidden;}}
+.stApp {{ background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%); }}
+footer {{ visibility: hidden; }}
+
 .navbar {{display:flex; align-items:center; justify-content:space-between; padding:14px 10px;}}
 .nav-left, .nav-right {{display:flex; gap:22px; align-items:center;}}
 .nav-link {{font-weight:600; color:#0f172a; text-decoration:none;}}
 .nav-cta {{background:#2563eb; color:white !important; padding:8px 14px; border-radius:10px; font-weight:600; text-decoration:none;}}
+
 .chips {{display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 6px 0;}}
 .chip {{display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; font-size:13px; background:white;}}
 .hero {{padding: 10px 0 20px 0;}}
@@ -40,8 +40,10 @@ footer {{visibility: hidden;}}
 .h1 {{font-size:36px; line-height:1.2; font-weight:800; color:#0f172a; margin:6px 0;}}
 .h1 span {{color:#64748b; font-weight:800;}}
 .hero-subgrid {{display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 22px 0; font-size:14px; color:#334155;}}
+
 .section-kicker {{display:flex; align-items:center; gap:10px; color:#2563eb; font-weight:700; font-size:12px; text-transform:uppercase; margin-top:20px;}}
 .badge {{padding:2px 8px; background:#e0ecff; border-radius:999px; font-size:11px; color:#1e40af;}}
+
 .card {{display:grid; grid-template-columns:1.1fr .9fr; gap:26px; padding:22px; border:1px solid #e5e7eb; border-radius:16px; background:white;}}
 .card + .card {{margin-top:16px;}}
 .card-date {{font-size:11px; color:#64748b; text-transform:uppercase; margin-bottom:6px;}}
@@ -52,8 +54,7 @@ footer {{visibility: hidden;}}
 .stButton>button, .stLinkButton>button {{border-radius:10px; padding:8px 12px; font-weight:600;}}
 .card-block {{margin-bottom:8px;}}
 
-/* ---- FULL-BLEED HERO ----
-   This breaks the hero out of Streamlit's content column so it spans the full viewport width. */
+/* ---------- FULL-BLEED HERO (works outside iframes) ---------- */
 .full-bleed {{
   width: 100vw;
   position: relative;
@@ -65,16 +66,31 @@ footer {{visibility: hidden;}}
 .hero-bleed {{
   width: 100vw;
   height: {HERO_HEIGHT_PX}px;
+  position: relative;
   overflow: hidden;
   border-radius: 12px;
   box-shadow: 0 6px 18px rgba(0,0,0,.12);
-  background: #fff;
+  background: #000;
 }}
-.hero-bleed img {{
+.hero-bleed img.fade {{
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
+  opacity: 0;
+  animation: fadeShow 9s infinite;
+}}
+.hero-bleed img.fade.img2 {{ animation-delay: 3s; }}
+.hero-bleed img.fade.img3 {{ animation-delay: 6s; }}
+
+/* Fade each image in for ~8% of the cycle, then fade out */
+@keyframes fadeShow {{
+  0%   {{ opacity: 0; }}
+  3%   {{ opacity: 1; }}
+  28%  {{ opacity: 1; }}
+  33%  {{ opacity: 0; }}
+  100% {{ opacity: 0; }}
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -120,7 +136,7 @@ st.markdown("""
 </section>
 """, unsafe_allow_html=True)
 
-# --- Utilities for slideshow ---
+# --- Utils for slideshow (base64 so we can inject <img> via markdown) ---
 def img_to_data_uri(p: Path) -> str:
     data = p.read_bytes()
     b64 = base64.b64encode(data).decode("utf-8")
@@ -128,26 +144,22 @@ def img_to_data_uri(p: Path) -> str:
     mime = "jpeg" if ext in ("jpg", "jpeg") else "png"
     return f"data:image/{mime};base64,{b64}"
 
-# --- FULL-BLEED HERO SLIDESHOW ---
 slide_imgs = [p for p in SLIDESHOW_IMAGES if p.exists()]
 if slide_imgs:
     sources = [img_to_data_uri(p) for p in slide_imgs]
-    st.components.v1.html(f"""
-      <div class="full-bleed">
-        <div class="hero-bleed">
-          <img id="heroSlide" src="{sources[0]}" alt="PPE slideshow">
-        </div>
-      </div>
-      <script>
-        const imgs = {sources};
-        let idx = 0;
-        setInterval(() => {{
-          idx = (idx + 1) % imgs.length;
-          const el = document.getElementById('heroSlide');
-          if (el) el.src = imgs[idx];
-        }}, 1000);
-      </script>
-    """, height=HERO_HEIGHT_PX + 4)  # iframe height >= hero height so it displays
+    # Ensure we always have 3 <img> for nice staggering (repeat last ones if fewer)
+    while len(sources) < 3:
+        sources.append(sources[-1])
+
+    st.markdown(f"""
+<div class="full-bleed">
+  <div class="hero-bleed">
+    <img class="fade img1" src="{sources[0]}" alt="slide 1"/>
+    <img class="fade img2" src="{sources[1]}" alt="slide 2"/>
+    <img class="fade img3" src="{sources[2]}" alt="slide 3"/>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 else:
     st.info("Add images to `images/carousel1.png`, `images/carousel2.png`, `images/carousel3.png` to drive the slideshow.")
 
