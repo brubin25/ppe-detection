@@ -6,12 +6,11 @@ from jose import jwt, jwk   # keep jwk import (useful if you extend validation)
 import streamlit as st
 
 # ---- Config (from secrets with sane defaults) ----
-COGNITO_DOMAIN   = st.secrets["COGNITO_DOMAIN"]          # e.g. https://my-ppelogin.auth.us-east-2.amazoncognito.com
+COGNITO_DOMAIN   = st.secrets["COGNITO_DOMAIN"]          # e.g. https://us-xxx.auth.xx.amazoncognito.com
 COGNITO_CLIENTID = st.secrets["COGNITO_APP_CLIENT_ID"]   # App client (no secret)
 COGNITO_POOL_ID  = st.secrets["COGNITO_USER_POOL_ID"]    # e.g. us-east-2_abc123
 REGION           = st.secrets.get("REGION", "us-east-2")
 REDIRECT_URI     = st.secrets["COGNITO_REDIRECT_URI"]    # your Streamlit URL
-
 
 # ---------------------------
 # Utilities
@@ -29,6 +28,17 @@ def _first(v):
         return v[0] if v else None
     return v
 
+def _config_ok():
+    problems = []
+    if not COGNITO_DOMAIN or not COGNITO_DOMAIN.startswith("https://"):
+        problems.append("COGNITO_DOMAIN must start with https:// and not be empty.")
+    if "amazoncognito.com" not in (COGNITO_DOMAIN or ""):
+        problems.append("COGNITO_DOMAIN doesn't look like a Cognito domain.")
+    if not COGNITO_CLIENTID:
+        problems.append("COGNITO_APP_CLIENT_ID is empty.")
+    if not REDIRECT_URI or not REDIRECT_URI.startswith("http"):
+        problems.append("COGNITO_REDIRECT_URI must start with http(s) and not be empty.")
+    return problems
 
 # ---------------------------
 # Hosted UI URLs & JWKS
@@ -46,7 +56,6 @@ def login_url(state="state123"):
 def _jwks():
     url = f"https://cognito-idp.{REGION}.amazonaws.com/{COGNITO_POOL_ID}/.well-known/jwks.json"
     return requests.get(url, timeout=15).json()
-
 
 # ---------------------------
 # Token exchange & validation
@@ -75,7 +84,6 @@ def validate_id_token(id_token: str):
         options={"verify_at_hash": False},  # Hosted UI returns access token separately
     )
 
-
 # ---------------------------
 # Session helpers
 # ---------------------------
@@ -83,16 +91,20 @@ def is_logged_in() -> bool:
     """True if we have an id_token in session."""
     return "id_token" in st.session_state or st.session_state.get("logged_in", False)
 
-
 # ---------------------------
 # Public API used by pages
 # ---------------------------
 def ensure_logged_in():
     """
-    If not logged-in, render a 'Log in with Cognito' button and stop.
-    If redirected back with ?code=..., exchange for tokens, validate, and
-    store the session.
+    If not logged-in, render a 'Log in with Cognito' link and stop.
+    If redirected back with ?code=..., exchange for tokens, validate, and store the session.
     """
+    # Config sanity check (prevents 'button goes Home' when URL is relative)
+    issues = _config_ok()
+    if issues:
+        st.error("Auth configuration issue:\n- " + "\n- ".join(issues))
+        st.stop()
+
     qp = _get_query_params()
 
     # Complete the OAuth flow when Cognito redirects back
@@ -116,18 +128,29 @@ def ensure_logged_in():
             except Exception:
                 st.experimental_set_query_params()  # clears
 
-    # If still not logged in, show button
+    # If still not logged in, show a robust HTML link (works even if link_button misbehaves)
     if not is_logged_in():
-        st.link_button("🔐 Log in with Cognito", login_url(), type="primary")
+        href = login_url()
+        # Use an <a> so the browser navigates to Cognito directly (no Streamlit interception)
+        st.markdown(
+            f"""
+            <a href="{href}" target="_self" style="
+                display:inline-block; background:#2563eb; color:#fff; 
+                padding:10px 16px; border-radius:8px; font-weight:600; text-decoration:none;">
+                🔐 Log in with Cognito
+            </a>
+            """,
+            unsafe_allow_html=True,
+        )
+        # Optional tiny debug (remove later)
+        # st.caption(f"Auth to: {href}")
         st.stop()
-
 
 def logout_button():
     if is_logged_in():
         if st.button("Log out"):
             st.session_state.clear()
             st.rerun()
-
 
 def require_login(
     login_page_path: str = "pages/00_Login.py",
@@ -137,15 +160,11 @@ def require_login(
     Gate a page behind login. Use at the top of any page you want to protect:
         from auth import require_login
         require_login()
-
-    If not logged in, show a friendly message and link to the Login page, then stop.
     """
     if not is_logged_in():
         st.warning(message)
-        # Prefer page_link when available; fallback to a regular button to the Hosted UI
         try:
             st.page_link(login_page_path, label="🔐 Go to Login")
         except Exception:
-            # Older Streamlit versions without page_link
             st.link_button("🔐 Go to Login", login_url(), type="primary")
         st.stop()
