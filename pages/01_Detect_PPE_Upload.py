@@ -7,10 +7,16 @@ import mimetypes
 from datetime import datetime
 import random
 
+# ✅ Auth guard (kept minimal; doesn’t change your logic)
+from auth import require_login
+
 # ------------------------
 # PAGE CONFIG
 # ------------------------
 st.set_page_config(page_title="Detect PPE (Upload)", page_icon="🦺", layout="wide")
+
+# Require login for this page (homepage can remain public)
+require_login()
 
 # ------------------------
 # AWS CONFIG — like your reference (secrets with env fallbacks)
