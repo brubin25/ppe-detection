@@ -4,6 +4,8 @@ from pathlib import Path
 from auth import ensure_logged_in, logout_button
 
 st.set_page_config(page_title="Account • PPE Safety Suite", page_icon="🦺", layout="wide")
+st.sidebar.markdown("## Account")
+
 
 # ---- Styles (matches your other pages) ----
 st.markdown("""
