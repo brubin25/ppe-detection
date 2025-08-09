@@ -3,12 +3,7 @@ from pathlib import Path
 from PIL import Image
 import base64
 
-# ✅ auth helpers
-from auth import (
-    complete_login_if_returned,
-    login_url,
-    logout_button,
-)
+from auth import complete_login_if_returned, login_url, logout_button
 
 # --- Page config ---
 st.set_page_config(page_title="PPE Safety Suite", page_icon="🦺", layout="wide")
