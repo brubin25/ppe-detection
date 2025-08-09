@@ -114,9 +114,6 @@ st.markdown("""
     <a class="nav-link" href="#">About</a>
     <a class="nav-link" href="#">Technology</a>
   </div>
-  <div class="nav-right">
-    <a class="nav-cta" href="#">Contact us</a>
-  </div>
 </div>
 """, unsafe_allow_html=True)
 
