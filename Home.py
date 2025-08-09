@@ -2,13 +2,10 @@ import streamlit as st
 from pathlib import Path
 from PIL import Image
 import base64
-from auth import ensure_logged_in, logout_button, login_url  # ✅ add logout/login helpers
+from auth import logout_button, login_url  # 🔹 Home is public; only need login/logout helpers
 
 # --- Page config ---
 st.set_page_config(page_title="PPE Safety Suite", page_icon="🦺", layout="wide")
-
-# ✅ Check login (kept exactly as you had it)
-ensure_logged_in()
 
 # --- Top-right auth control (Login/Logout) ---
 hdr_left, hdr_right = st.columns([8, 1])
@@ -17,16 +14,18 @@ with hdr_right:
         # When logged in, show a small logout button
         logout_button()
     else:
-        # If ever shown unauthenticated, provide an easy login
+        # If unauthenticated, provide an easy login
         st.link_button("Log in", login_url(), type="primary")
 
-# --- Subtle greeting (smaller, no emoji) ---
+# --- Subtle greeting (smaller, no emoji) — shown only when logged in ---
 if "user" in st.session_state:
     user_email = st.session_state["user"].get("email", "")
     user_name  = st.session_state["user"].get("name", "")
     display_name = user_name or (user_email.split("@")[0] if user_email else "User")
-    st.markdown(f'<div class="greet">Welcome back to PPE Safety Suite, <strong>{display_name}</strong>.</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="greet">Welcome back to PPE Safety Suite, <strong>{display_name}</strong>.</div>',
+        unsafe_allow_html=True
+    )
 
 # --- Assets for cards (unchanged) ---
 HERO_IMG = Path("images/home1.png")
@@ -51,8 +50,8 @@ footer {{ visibility: hidden; }}
 
 /* Subtle greeting line */
 .greet {{
-  font-size: 16px; 
-  color: #0f172a; 
+  font-size: 16px;
+  color: #0f172a;
   margin: 4px 0 8px 2px;
 }}
 
