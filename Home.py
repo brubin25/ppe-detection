@@ -11,35 +11,15 @@ st.set_page_config(page_title="PPE Safety Suite", page_icon="🦺", layout="wide
 # ✅ Finish OAuth callback if we just returned from Cognito (non-blocking)
 complete_login_if_returned()
 
-# --- Top-right auth control (Login/Logout) ---
-hdr_left, hdr_right = st.columns([8, 1])
-with hdr_right:
-    if "id_token" in st.session_state:
-        logout_button()
-    else:
-        st.link_button("Log in", login_url(), type="primary")
-
 # --- If not logged in, hide the entire sidebar (prevents seeing other pages) ---
 if "id_token" not in st.session_state:
     st.markdown(
         """
         <style>
         [data-testid="stSidebar"] { display: none !important; }
-        /* expand main area when sidebar is hidden */
         .block-container { padding-left: 2rem; padding-right: 2rem; }
         </style>
         """,
-        unsafe_allow_html=True,
-    )
-
-# --- Subtle greeting (small, professional; shown only when logged in) ---
-if "user" in st.session_state:
-    user_email = st.session_state["user"].get("email", "")
-    user_name  = st.session_state["user"].get("name", "")
-    display_name = user_name or (user_email.split("@")[0] if user_email else "User")
-    st.markdown(
-        '<div class="greet">Welcome back to PPE Safety Suite, <strong>'
-        f'{display_name}</strong>.</div>',
         unsafe_allow_html=True,
     )
 
@@ -71,10 +51,22 @@ footer {{ visibility: hidden; }}
   margin: 4px 0 8px 2px;
 }}
 
-.navbar {{display:flex; align-items:center; justify-content:space-between; padding:14px 10px;}}
-.nav-left, .nav-right {{display:flex; gap:22px; align-items:center;}}
-.nav-link {{font-weight:600; color:#0f172a; text-decoration:none;}}
-.nav-cta {{background:#2563eb; color:white !important; padding:8px 14px; border-radius:10px; font-weight:600; text-decoration:none;}}
+/* NAVBAR */
+.navbar-row {{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 10px; margin-bottom:6px;
+}}
+.nav-left a.nav-link {{
+  font-weight:600; color:#0f172a; text-decoration:none; margin-right:22px;
+}}
+.nav-brand {{ font-weight:800; font-size:16px; margin-right:24px; }}
+/* Make Streamlit link/button look like a compact nav action */
+.nav-right .stLinkButton>button, .nav-right .stButton>button {{
+  padding:6px 12px; border-radius:10px; font-weight:600; line-height:1;
+}}
+.nav-right .stLinkButton>button {{
+  background:#2563eb; color:#fff;
+}}
 
 .chips {{display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 6px 0;}}
 .chip {{display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; font-size:13px; background:white;}}
@@ -120,17 +112,43 @@ footer {{ visibility: hidden; }}
 </style>
 """, unsafe_allow_html=True)
 
-# --- NAVBAR ---
-st.markdown("""
-<div class="navbar">
-  <div class="nav-left">
-    <span style="font-weight:800; font-size:16px;">🦺 PPE Safety Suite</span>
-    <a class="nav-link" href="#">Homepage</a>
-    <a class="nav-link" href="#">About</a>
-    <a class="nav-link" href="#">Technology</a>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+# --- NAVBAR (left links + right auth control in one row) ---
+left, right = st.columns([0.8, 0.2])
+with left:
+    st.markdown(
+        """
+        <div class="navbar-row">
+          <div class="nav-left">
+            <span class="nav-brand">🦺 PPE Safety Suite</span>
+            <a class="nav-link" href="#">Homepage</a>
+            <a class="nav-link" href="#">About</a>
+            <a class="nav-link" href="#">Technology</a>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with right:
+    st.markdown('<div class="navbar-row nav-right">', unsafe_allow_html=True)
+    if "id_token" in st.session_state:
+        # small, right-aligned logout (keeps your existing logic)
+        logout_button()
+    else:
+        st.link_button("Log in", login_url(), type="primary")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# --- Subtle greeting (small, professional; shown only when logged in) ---
+if "user" in st.session_state:
+    user_email = st.session_state["user"].get("email", "")
+    user_name  = st.session_state["user"].get("name", "")
+    # Prefer email prefix when available; else fall back to name; else "User"
+    display_name = (user_email.split("@")[0] if user_email else (user_name or "User"))
+    st.markdown(
+        '<div class="greet">Welcome back to PPE Safety Suite, <strong>'
+        f'{display_name}</strong>.</div>',
+        unsafe_allow_html=True,
+    )
 
 # --- HERO TEXT ---
 st.markdown("""
