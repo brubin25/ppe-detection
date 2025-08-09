@@ -2,9 +2,18 @@ import streamlit as st
 from pathlib import Path
 from PIL import Image
 import base64
+from auth import ensure_logged_in  # ✅ Import your auth helper
 
 # --- Page config ---
 st.set_page_config(page_title="PPE Safety Suite", page_icon="🦺", layout="wide")
+
+# ✅ Check login and greet user
+ensure_logged_in()
+if "user" in st.session_state:
+    user_email = st.session_state["user"].get("email", "")
+    # Extract name from email (before @)
+    display_name = user_email.split("@")[0] if user_email else "User"
+    st.markdown(f"### 👋 Hi **{display_name}**, welcome back to PPE Safety Suite!")
 
 # --- Assets for cards (unchanged) ---
 HERO_IMG = Path("images/home1.png")
@@ -12,27 +21,24 @@ CARD_IMG1 = Path("images/home1.png")
 CARD_IMG2 = Path("images/home2.png")
 CARD_IMG3 = Path("images/home3.png")  # Optional
 
-# --- Slideshow images (use your new set) ---
+# --- Slideshow images ---
 SLIDESHOW_IMAGES = [
     Path("images/carousel1.png"),
     Path("images/carousel2.png"),
     Path("images/carousel3.png"),
 ]
 
-# Height for hero slideshow (adjust to taste)
 HERO_HEIGHT_PX = 420
 
-# --- Global styles (adds full-bleed + hero CSS) ---
+# --- Global styles ---
 st.markdown(f"""
 <style>
 .stApp {{ background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%); }}
 footer {{ visibility: hidden; }}
-
 .navbar {{display:flex; align-items:center; justify-content:space-between; padding:14px 10px;}}
 .nav-left, .nav-right {{display:flex; gap:22px; align-items:center;}}
 .nav-link {{font-weight:600; color:#0f172a; text-decoration:none;}}
 .nav-cta {{background:#2563eb; color:white !important; padding:8px 14px; border-radius:10px; font-weight:600; text-decoration:none;}}
-
 .chips {{display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 6px 0;}}
 .chip {{display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; font-size:13px; background:white;}}
 .hero {{padding: 10px 0 20px 0;}}
@@ -40,10 +46,8 @@ footer {{ visibility: hidden; }}
 .h1 {{font-size:36px; line-height:1.2; font-weight:800; color:#0f172a; margin:6px 0;}}
 .h1 span {{color:#64748b; font-weight:800;}}
 .hero-subgrid {{display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 22px 0; font-size:14px; color:#334155;}}
-
 .section-kicker {{display:flex; align-items:center; gap:10px; color:#2563eb; font-weight:700; font-size:12px; text-transform:uppercase; margin-top:20px;}}
 .badge {{padding:2px 8px; background:#e0ecff; border-radius:999px; font-size:11px; color:#1e40af;}}
-
 .card {{display:grid; grid-template-columns:1.1fr .9fr; gap:26px; padding:22px; border:1px solid #e5e7eb; border-radius:16px; background:white;}}
 .card + .card {{margin-top:16px;}}
 .card-date {{font-size:11px; color:#64748b; text-transform:uppercase; margin-bottom:6px;}}
@@ -53,45 +57,12 @@ footer {{ visibility: hidden; }}
 .card-img {{border-radius:12px; overflow:hidden;}}
 .stButton>button, .stLinkButton>button {{border-radius:10px; padding:8px 12px; font-weight:600;}}
 .card-block {{margin-bottom:8px;}}
-
-/* ---------- FULL-BLEED HERO (works outside iframes) ---------- */
-.full-bleed {{
-  width: 100vw;
-  position: relative;
-  left: 50%;
-  right: 50%;
-  margin-left: -50vw;
-  margin-right: -50vw;
-}}
-.hero-bleed {{
-  width: 100vw;
-  height: {HERO_HEIGHT_PX}px;
-  position: relative;
-  overflow: hidden;
-  border-radius: 12px;
-  box-shadow: 0 6px 18px rgba(0,0,0,.12);
-  background: #000;
-}}
-.hero-bleed img.fade {{
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  animation: fadeShow 9s infinite;
-}}
+.full-bleed {{width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw;}}
+.hero-bleed {{width: 100vw; height: {HERO_HEIGHT_PX}px; position: relative; overflow: hidden; border-radius: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.12); background: #000;}}
+.hero-bleed img.fade {{position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; animation: fadeShow 9s infinite;}}
 .hero-bleed img.fade.img2 {{ animation-delay: 3s; }}
 .hero-bleed img.fade.img3 {{ animation-delay: 6s; }}
-
-/* Fade each image in for ~8% of the cycle, then fade out */
-@keyframes fadeShow {{
-  0%   {{ opacity: 0; }}
-  3%   {{ opacity: 1; }}
-  28%  {{ opacity: 1; }}
-  33%  {{ opacity: 0; }}
-  100% {{ opacity: 0; }}
-}}
+@keyframes fadeShow {{0%{{ opacity: 0; }} 3%{{ opacity: 1; }} 28%{{ opacity: 1; }} 33%{{ opacity: 0; }} 100%{{ opacity: 0; }}}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -118,25 +89,17 @@ st.markdown("""
   <div class="chip">🛡️ Enhanced Workplace Safety</div>
   <div class="chip">🤖 AI/ML Powered</div>
 </div>
-
 <section class="hero">
   <div class="kicker">Revolutionizing Safety with</div>
   <div class="h1">AI-Powered PPE Detection</div>
-
   <div class="hero-subgrid">
-    <div>
-      <b>Advanced AI Solutions</b>
-      <div>Our cutting-edge AI leverages AWS Rekognition for precise and reliable PPE detection.</div>
-    </div>
-    <div>
-      <b>Real-time Monitoring</b>
-      <div>Ensure compliance and enhance safety in industrial environments with continuous, automated oversight.</div>
-    </div>
+    <div><b>Advanced AI Solutions</b><div>Our cutting-edge AI leverages AWS Rekognition for precise and reliable PPE detection.</div></div>
+    <div><b>Real-time Monitoring</b><div>Ensure compliance and enhance safety with continuous, automated oversight.</div></div>
   </div>
 </section>
 """, unsafe_allow_html=True)
 
-# --- Utils for slideshow (base64 so we can inject <img> via markdown) ---
+# --- Slideshow ---
 def img_to_data_uri(p: Path) -> str:
     data = p.read_bytes()
     b64 = base64.b64encode(data).decode("utf-8")
@@ -147,10 +110,8 @@ def img_to_data_uri(p: Path) -> str:
 slide_imgs = [p for p in SLIDESHOW_IMAGES if p.exists()]
 if slide_imgs:
     sources = [img_to_data_uri(p) for p in slide_imgs]
-    # Ensure we always have 3 <img> for nice staggering (repeat last ones if fewer)
     while len(sources) < 3:
         sources.append(sources[-1])
-
     st.markdown(f"""
 <div class="full-bleed">
   <div class="hero-bleed">
@@ -160,10 +121,6 @@ if slide_imgs:
   </div>
 </div>
 """, unsafe_allow_html=True)
-else:
-    st.info("Add images to `images/carousel1.png`, `images/carousel2.png`, `images/carousel3.png` to drive the slideshow.")
-
-st.write("")
 
 # --- SECTION: Updates ---
 st.markdown("""
