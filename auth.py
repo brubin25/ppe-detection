@@ -96,10 +96,10 @@ def is_logged_in() -> bool:
 # ---------------------------
 def ensure_logged_in():
     """
-    If not logged-in, render a 'Log in with Cognito' link and stop.
+    If not logged-in, render login control and stop.
     If redirected back with ?code=..., exchange for tokens, validate, and store the session.
     """
-    # Config sanity check (prevents 'button goes Home' when URL is relative)
+    # Config sanity check (prevents ‘button goes Home’ when URL is bad/relative)
     issues = _config_ok()
     if issues:
         st.error("Auth configuration issue:\n- " + "\n- ".join(issues))
@@ -128,22 +128,31 @@ def ensure_logged_in():
             except Exception:
                 st.experimental_set_query_params()  # clears
 
-    # If still not logged in, show a robust HTML link (works even if link_button misbehaves)
+    # If still not logged in, force a TOP-LEVEL redirect to Cognito (no iframes)
     if not is_logged_in():
         href = login_url()
-        # Use an <a> so the browser navigates to Cognito directly (no Streamlit interception)
+
+        # Button that triggers full-page navigation (bypass any embedding)
+        if st.button("🔐 Log in with Cognito", type="primary"):
+            st.markdown(
+                f"""
+                <script>
+                  window.top.location.replace({href!r});
+                </script>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.stop()
+
+        # Fallback link in case JS is disabled or blocked
         st.markdown(
             f"""
-            <a href="{href}" target="_self" style="
-                display:inline-block; background:#2563eb; color:#fff; 
-                padding:10px 16px; border-radius:8px; font-weight:600; text-decoration:none;">
-                🔐 Log in with Cognito
-            </a>
+            <div style="margin-top:8px">
+              <a href="{href}" target="_self">Having trouble? Click here to open the Cognito login.</a>
+            </div>
             """,
             unsafe_allow_html=True,
         )
-        # Optional tiny debug (remove later)
-        # st.caption(f"Auth to: {href}")
         st.stop()
 
 def logout_button():
