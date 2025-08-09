@@ -2,29 +2,50 @@ import streamlit as st
 from pathlib import Path
 from PIL import Image
 import base64
-from auth import logout_button, login_url  # 🔹 Home is public; only need login/logout helpers
+
+# ✅ auth helpers
+from auth import (
+    complete_login_if_returned,
+    login_url,
+    logout_button,
+)
 
 # --- Page config ---
 st.set_page_config(page_title="PPE Safety Suite", page_icon="🦺", layout="wide")
+
+# ✅ Finish OAuth callback if we just returned from Cognito (non-blocking)
+complete_login_if_returned()
 
 # --- Top-right auth control (Login/Logout) ---
 hdr_left, hdr_right = st.columns([8, 1])
 with hdr_right:
     if "id_token" in st.session_state:
-        # When logged in, show a small logout button
         logout_button()
     else:
-        # If unauthenticated, provide an easy login
         st.link_button("Log in", login_url(), type="primary")
 
-# --- Subtle greeting (smaller, no emoji) — shown only when logged in ---
+# --- If not logged in, hide the entire sidebar (prevents seeing other pages) ---
+if "id_token" not in st.session_state:
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] { display: none !important; }
+        /* expand main area when sidebar is hidden */
+        .block-container { padding-left: 2rem; padding-right: 2rem; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# --- Subtle greeting (small, professional; shown only when logged in) ---
 if "user" in st.session_state:
     user_email = st.session_state["user"].get("email", "")
     user_name  = st.session_state["user"].get("name", "")
     display_name = user_name or (user_email.split("@")[0] if user_email else "User")
     st.markdown(
-        f'<div class="greet">Welcome back to PPE Safety Suite, <strong>{display_name}</strong>.</div>',
-        unsafe_allow_html=True
+        '<div class="greet">Welcome back to PPE Safety Suite, <strong>'
+        f'{display_name}</strong>.</div>',
+        unsafe_allow_html=True,
     )
 
 # --- Assets for cards (unchanged) ---
