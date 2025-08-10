@@ -181,23 +181,6 @@ else:
 
 st.divider()
 
-# ------------------------
-# Quick add / upsert
-# ------------------------
-st.subheader("Add employee")
-with st.form("add_emp_form", clear_on_submit=True):
-    c1, c2, c3 = st.columns([2,1,1])
-    new_emp_id = c1.text_input("New EmployeeID", placeholder="e.g., employee123")
-    new_emp_v = c2.number_input("Initial violations", min_value=0, value=0, step=1)
-    submitted = c3.form_submit_button("Add / Upsert")
-    if submitted:
-        if not new_emp_id.strip():
-            st.error("EmployeeID cannot be empty.")
-        else:
-            upsert_employee(new_emp_id.strip(), int(new_emp_v))
-            st.success(f"Upserted '{new_emp_id}' with violations={int(new_emp_v)}.")
-            st.cache_data.clear()
-
 # =====================================================================
 # Register new employee WITH ID photo (S3 + DynamoDB employee_master)
 # =====================================================================
