@@ -23,10 +23,14 @@ require_login()
 # ------------------------
 AWS_ACCESS_KEY = st.secrets.get("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID", ""))
 AWS_SECRET_KEY = st.secrets.get("AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", ""))
-REGION        = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
+REGION         = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
 
-BUCKET_NAME   = "ppe-detection-input"
-UPLOAD_PREFIX = "uploads/"
+BUCKET_NAME    = "ppe-detection-input"
+UPLOAD_PREFIX  = "uploads/"  # all uploads go under uploads/
+
+# Normalize to ensure single trailing slash (safety guard; doesn't change behavior)
+if not UPLOAD_PREFIX.endswith("/"):
+    UPLOAD_PREFIX = UPLOAD_PREFIX + "/"
 
 # ------------------------
 # CONSTANTS
@@ -81,18 +85,19 @@ def s3_client():
 
 def unique_key(filename: str) -> str:
     ext = os.path.splitext(filename)[1].lower()
+    # Build a key under uploads/: uploads/<timestamp>-<uuid>.<ext>
     return f"{UPLOAD_PREFIX}{int(time.time())}-{uuid.uuid4().hex[:8]}{ext}"
 
 def guess_content_type(filename: str) -> str:
     ctype, _ = mimetypes.guess_type(filename)
     return ctype or "application/octet-stream"
 
-def fake_rekognition_response(filename: str):
+def fake_rekognition_response(image_key: str):
     """
     Placeholder shape for what a Rekognition/Lambda result might return.
     Extend/replace this with your real JSON shape when you hook up to your backend.
     """
-    base = os.path.splitext(os.path.basename(filename))[0] or "Unknown"
+    base = os.path.splitext(os.path.basename(image_key))[0] or "Unknown"
     # Randomize a little for demo feel
     all_items = ["Hard Hat", "Safety Vest", "Safety Glasses", "Gloves", "Ear Protection"]
     missing = ["No Helmet", "No Safety Vest"]  # example violations
@@ -110,8 +115,8 @@ def fake_rekognition_response(filename: str):
         "status": "Non-Compliant" if missing else "Compliant",
         "violations": missing,
         "ppe_detected": ["Safety Glasses", "Gloves"],  # example present PPE
-        "model_confidence": confidence,               # top-level overall score
-        "image_key": filename,
+        "model_confidence": confidence,                # top-level overall score
+        "image_key": image_key,                        # show the real S3 object key
     }
 
 # ------------------------
@@ -147,7 +152,7 @@ with left:
             if not AWS_ACCESS_KEY or not AWS_SECRET_KEY:
                 st.error("❌ AWS credentials not found. Please add them in `.streamlit/secrets.toml`.")
             else:
-                key = unique_key(original_name)
+                key = unique_key(original_name)  # ← uploads/<timestamp>-<uuid>.<ext>
                 try:
                     with st.spinner("Uploading…"):
                         s3 = s3_client()
@@ -158,8 +163,8 @@ with left:
                             ContentType=guess_content_type(original_name),
                         )
                     st.success("✅ Uploaded successfully. PPE analysis will start shortly.")
-                    # Simulate/attach a detection response
-                    result = fake_rekognition_response(original_name)
+                    # Simulate/attach a detection response (pass key so it shows where it landed)
+                    result = fake_rekognition_response(key)
                 except Exception as e:
                     st.error(f"❌ Upload failed: {e}")
 
