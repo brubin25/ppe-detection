@@ -31,158 +31,31 @@ def _require(name, *aliases):
     _missing.append(name if not aliases else f"{name} (aliases tried: {', '.join(aliases)})")
     return None
 
-# Map to whatever exists in utils/data.py
+# (Kept for compatibility even though we no longer use them on this page)
 load_employees_from_dynamodb = _require("load_employees_from_dynamodb", "load_employees", "get_employees")
 update_employee_violations   = _require("update_employee_violations", "update_employee", "set_employee_violations")
 upsert_employee              = _require("upsert_employee", "put_employee", "create_or_update_employee")
 
-if _missing:
-    st.error(
-        "Your `utils/data.py` is missing the following function(s): "
-        + ", ".join(f"`{m}`" for m in _missing)
-        + ".\n\nAdd them (or rename yours to match), then rerun."
-    )
-    st.stop()
+# Do not block the page for missing legacy helpers anymore (we don't use them below)
+# They are still imported above for compatibility with your repo.
 
+# ------------------------
+# PAGE CONFIG
+# ------------------------
 st.set_page_config(page_title="Employees (Master List)", page_icon="👥", layout="wide")
 st.title("👥 Employees (Master List)")
-st.caption("Manage aggregated violation counts per employee (DynamoDB: PPEViolationTracker).")
-
-@st.cache_data(ttl=30, show_spinner=False)
-def _cached_load_employees():
-    st.session_state.setdefault("_emp_load_count", 0)
-    st.session_state["_emp_load_count"] += 1
-    print(f"[info] Loading employees from DynamoDB (call #{st.session_state['_emp_load_count']})")
-    return load_employees_from_dynamodb()
+st.caption("Directory of employees from DynamoDB **employee_master** with S3 photo thumbnails. Add new employees below.")
 
 # ------------------------
-# Existing toolbar controls
+# AWS CONFIG — reads secrets/env
 # ------------------------
-toolbar = st.container()
-with toolbar:
-    c1, c2, c3, c4, c5 = st.columns([2,2,2,2,1])
-    query = c1.text_input("Search by EmployeeID", placeholder="e.g., employee001")
-    min_v = c2.number_input("Min violations", min_value=0, value=0, step=1)
-    sort_by = c3.selectbox("Sort by", ["violations", "EmployeeID"], index=0)
-    sort_asc = c4.toggle("Ascending", value=False)
-    refresh = c5.button("↻ Refresh")
-
-if refresh:
-    st.cache_data.clear()
-    st.experimental_rerun()
-
-df = _cached_load_employees()
-
-# ------------------------
-# Filter/sort view
-# ------------------------
-view = df.copy()
-if query:
-    view = view[view["EmployeeID"].str.contains(query, case=False)]
-view = view[view["violations"] >= min_v]
-view = view.sort_values(by=sort_by, ascending=sort_asc, kind="mergesort").reset_index(drop=True)
-
-# ------------------------
-# KPI cards
-# ------------------------
-k1, k2, k3 = st.columns(3)
-k1.metric("Employees", len(view))
-k2.metric("Total violations", int(view["violations"].sum()) if not view.empty else 0)
-threshold = k3.number_input("Critical threshold", min_value=1, value=3, step=1)
-critical_count = (view["violations"] >= threshold).sum() if not view.empty else 0
-k3.metric("Critical (≥ threshold)", int(critical_count))
-
-st.divider()
-
-# ------------------------
-# Top violators (simple chart)
-# ------------------------
-st.subheader("Top violators")
-if view.empty:
-    st.info("No data.")
-else:
-    top = view.sort_values("violations", ascending=False).head(10).set_index("EmployeeID")["violations"]
-    st.bar_chart(top)
-
-st.divider()
-
-# ------------------------
-# Editable grid
-# ------------------------
-st.subheader("Edit & Save")
-st.caption("You can edit violations in the table and click **Save changes**. Only changed rows will be updated.")
-
-edited = st.data_editor(
-    view,
-    use_container_width=True,
-    hide_index=True,
-    num_rows="fixed",
-    column_config={
-        "EmployeeID": st.column_config.TextColumn("EmployeeID", disabled=True),
-        "violations": st.column_config.NumberColumn("Violations", help="Total aggregated violations", min_value=0, step=1),
-    },
-    key="emp_editor",
-)
-
-left, right = st.columns([1, 6])
-with left:
-    if st.button("Save changes", type="primary"):
-        diffs = []
-        for i in range(len(edited)):
-            row_old = view.iloc[i]
-            row_new = edited.iloc[i]
-            if int(row_old["violations"]) != int(row_new["violations"]):
-                diffs.append((row_new["EmployeeID"], int(row_new["violations"])))
-        if not diffs:
-            st.info("No changes detected.")
-        else:
-            for emp_id, new_val in diffs:
-                print(f"[info] Saving change -> {emp_id}:{new_val}")
-                update_employee_violations(emp_id, new_val)
-            st.success(f"Updated {len(diffs)} record(s).")
-            st.cache_data.clear()
-with right:
-    st.caption("Tip: set a critical threshold above to monitor high-risk employees.")
-
-st.divider()
-
-# ------------------------
-# Quick add / upsert (kept as-is)
-# ------------------------
-st.subheader("Add employee")
-with st.form("add_emp_form", clear_on_submit=True):
-    c1, c2, c3 = st.columns([2,1,1])
-    new_emp_id = c1.text_input("New EmployeeID", placeholder="e.g., employee123")
-    new_emp_v = c2.number_input("Initial violations", min_value=0, value=0, step=1)
-    submitted = c3.form_submit_button("Add / Upsert")
-    if submitted:
-        if not new_emp_id.strip():
-            st.error("EmployeeID cannot be empty.")
-        else:
-            upsert_employee(new_emp_id.strip(), int(new_emp_v))
-            st.success(f"Upserted '{new_emp_id}' with violations={int(new_emp_v)}.")
-            st.cache_data.clear()
-
-# =====================================================================
-# NEW SECTION: Register new employee WITH ID photo (S3 + DynamoDB employee_master)
-# =====================================================================
-
-st.divider()
-st.subheader("Register new employee (with ID photo)")
-st.caption(
-    "Create a new employee profile with professional details and upload an ID photo. "
-    "The photo is stored in S3 at **ppe-detection-input/employees/** and the profile is saved to "
-    "**DynamoDB table `employee_master`** (separate from your violation tracker)."
-)
-
-# --- AWS config (reads secrets w/ env fallbacks) ---
 AWS_ACCESS_KEY = st.secrets.get("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID", ""))
 AWS_SECRET_KEY = st.secrets.get("AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", ""))
-REGION        = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
+REGION         = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
 
-S3_BUCKET        = "ppe-detection-input"
-S3_PREFIX        = "employees"             # employees/<employee_id>.<ext>
-EMPLOYEE_TABLE   = "employee_master"       # <-- NEW TABLE for employee profiles
+S3_BUCKET      = "ppe-detection-input"
+S3_PREFIX      = "employees"              # employees/<employee_id>.<ext>
+EMPLOYEE_TABLE = "employee_master"        # directory source
 
 def _s3_client():
     return boto3.client(
@@ -200,6 +73,146 @@ def _ddb_table(name: str):
         region_name=REGION,
     )
     return ddb.Table(name)
+
+# ------------------------
+# DATA LOADERS
+# ------------------------
+@st.cache_data(ttl=30, show_spinner=False)
+def load_employee_directory():
+    """
+    Read the employee directory from DynamoDB employee_master
+    and return a DataFrame with presigned S3 URLs for images.
+    """
+    tbl = _ddb_table(EMPLOYEE_TABLE)
+    items = []
+    # Full scan (table is small; if it grows, we can paginate)
+    resp = tbl.scan()
+    items.extend(resp.get("Items", []))
+    while "LastEvaluatedKey" in resp:
+        resp = tbl.scan(ExclusiveStartKey=resp["LastEvaluatedKey"])
+        items.extend(resp.get("Items", []))
+
+    # Build DataFrame
+    if not items:
+        return pd.DataFrame(
+            columns=["Photo", "EmployeeID", "name", "department", "site", "job_title", "email", "status", "created_at"]
+        )
+
+    df = pd.DataFrame(items)
+
+    # Ensure consistent columns
+    for col in ["EmployeeID", "name", "department", "site", "job_title", "email", "status", "created_at", "photo_key"]:
+        if col not in df.columns:
+            df[col] = ""
+
+    # Generate presigned URLs for photos (private bucket)
+    s3 = _s3_client()
+    def presign(key: str) -> str:
+        if not key:
+            return ""
+        try:
+            return s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": S3_BUCKET, "Key": key},
+                ExpiresIn=3600,
+            )
+        except Exception:
+            return ""
+
+    df["Photo"] = df["photo_key"].apply(presign)
+
+    # Order and rename display columns
+    df = df[
+        ["Photo", "EmployeeID", "name", "department", "site", "job_title", "email", "status", "created_at"]
+    ].rename(
+        columns={
+            "name": "Name",
+            "department": "Department",
+            "site": "Site",
+            "job_title": "Job Title",
+            "email": "Email",
+            "status": "Status",
+            "created_at": "Created",
+        }
+    )
+
+    # Sort by Name (stable)
+    df = df.sort_values(["Name", "EmployeeID"], kind="mergesort").reset_index(drop=True)
+    return df
+
+# ------------------------
+# DIRECTORY UI (professional, searchable)
+# ------------------------
+dir_toolbar = st.container()
+with dir_toolbar:
+    l, r, r2 = st.columns([3, 1, 1])
+    search = l.text_input("Search employees", placeholder="Name, EmployeeID, Department, Site, Email…")
+    dept_filter = r.selectbox("Filter by department", ["All", "Manufacturing", "Maintenance", "Quality", "Logistics", "Safety", "Other"])
+    refresh = r2.button("↻ Refresh")
+
+if refresh:
+    st.cache_data.clear()
+    st.experimental_rerun()
+
+directory_df = load_employee_directory()
+
+# Apply filters
+filtered = directory_df.copy()
+if search:
+    s = search.strip().lower()
+    mask = (
+        filtered["Name"].str.lower().str.contains(s, na=False)
+        | filtered["EmployeeID"].str.lower().str.contains(s, na=False)
+        | filtered["Department"].str.lower().str.contains(s, na=False)
+        | filtered["Site"].str.lower().str.contains(s, na=False)
+        | filtered["Email"].str.lower().str.contains(s, na=False)
+    )
+    filtered = filtered[mask]
+
+if dept_filter != "All":
+    filtered = filtered[filtered["Department"] == dept_filter]
+
+# KPI
+k1, k2 = st.columns(2)
+k1.metric("Employees", len(filtered))
+k2.metric("Total in directory", len(directory_df))
+
+# Display directory table with face thumbnails
+st.subheader("Employee directory")
+if filtered.empty:
+    st.info("No employees found. Use the form below to register a new employee.")
+else:
+    st.dataframe(
+        filtered,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Photo": st.column_config.ImageColumn(
+                "Photo",
+                help="Employee ID photo from S3",
+                width="small",
+            ),
+            "EmployeeID": st.column_config.TextColumn("EmployeeID", help="Primary key"),
+            "Name": st.column_config.TextColumn("Name"),
+            "Department": st.column_config.TextColumn("Department"),
+            "Site": st.column_config.TextColumn("Site"),
+            "Job Title": st.column_config.TextColumn("Job Title"),
+            "Email": st.column_config.TextColumn("Email"),
+            "Status": st.column_config.TextColumn("Status"),
+            "Created": st.column_config.TextColumn("Created"),
+        },
+    )
+
+# =====================================================================
+# REGISTER NEW EMPLOYEE (kept exactly as you approved)
+# =====================================================================
+st.divider()
+st.subheader("Register new employee (with ID photo)")
+st.caption(
+    "Create a new employee profile with professional details and upload an ID photo. "
+    "The photo is stored in S3 at **ppe-detection-input/employees/** and the profile is saved to "
+    "**DynamoDB table `employee_master`**."
+)
 
 def _make_employee_id(name: str) -> str:
     slug = "".join(ch for ch in (name or "").lower() if ch.isalnum() or ch in ("-", "_"))
@@ -229,7 +242,6 @@ def _put_photo_to_s3(employee_id: str, file, filename: str) -> str:
     return key
 
 def _upsert_employee_profile_to_master(employee_id: str, payload: dict):
-    """Write the profile to employee_master (separate table)."""
     tbl = _ddb_table(EMPLOYEE_TABLE)
     item = {
         "EmployeeID": employee_id,           # PK
@@ -312,6 +324,9 @@ if submit_new_emp:
 **Created at:** {created_at}
                 """
             )
-        st.info("Profile saved to `employee_master`. You can now associate detections with this EmployeeID.")
+
+        # Clear and reload the directory so the new hire appears immediately
+        st.cache_data.clear()
+        st.success("Directory refreshed. Scroll up to see the new employee.")
     except Exception as e:
         st.error(f"Something went wrong while creating the employee: {e}")
