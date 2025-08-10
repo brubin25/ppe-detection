@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 
-# --- Ensure Python can import from the project root (so utils.data works on Streamlit Cloud) ---
+# --- Make sure /utils is importable from inside /pages on Streamlit Cloud ---
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -10,12 +10,39 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import uuid
 from datetime import datetime
 import boto3
+import importlib
 
-from utils.data import (
-    load_employees_from_dynamodb,
-    update_employee_violations,
-    upsert_employee,
-)
+# --- Robust import of utils.data, with graceful fallbacks and clear errors ---
+_missing = []
+try:
+    data_mod = importlib.import_module("utils.data")
+except Exception as e:
+    st.error(
+        "Couldn't import `utils.data`. Make sure the repo has a `utils/` folder "
+        "with `__init__.py` and `data.py` in it. Error: {}".format(e)
+    )
+    st.stop()
+
+def _require(name, *aliases):
+    """Return the first attribute that exists on data_mod; remember if missing."""
+    for n in (name, *aliases):
+        if hasattr(data_mod, n):
+            return getattr(data_mod, n)
+    _missing.append(name if not aliases else f"{name} (aliases tried: {', '.join(aliases)})")
+    return None
+
+# Map to whatever exists in utils/data.py
+load_employees_from_dynamodb = _require("load_employees_from_dynamodb", "load_employees", "get_employees")
+update_employee_violations   = _require("update_employee_violations", "update_employee", "set_employee_violations")
+upsert_employee              = _require("upsert_employee", "put_employee", "create_or_update_employee")
+
+if _missing:
+    st.error(
+        "Your `utils/data.py` is missing the following function(s): "
+        + ", ".join(f"`{m}`" for m in _missing)
+        + ".\n\nAdd them (or rename yours to match), then rerun."
+    )
+    st.stop()
 
 st.set_page_config(page_title="Employees (Master List)", page_icon="👥", layout="wide")
 st.title("👥 Employees (Master List)")
@@ -214,7 +241,6 @@ def _upsert_employee_profile_to_master(employee_id: str, payload: dict):
         "photo_key": payload.get("photo_key"),
         "created_at": payload.get("created_at"),  # ISO8601
         "status": payload.get("status", "Active"),
-        # Feel free to expand schema later (manager, phone, etc.)
     }
     tbl.put_item(Item=item)
 
@@ -286,8 +312,6 @@ if submit_new_emp:
 **Created at:** {created_at}
                 """
             )
-
-        # NOTE: This does NOT alter PPEViolationTracker. Master list above still shows violations table.
         st.info("Profile saved to `employee_master`. You can now associate detections with this EmployeeID.")
     except Exception as e:
         st.error(f"Something went wrong while creating the employee: {e}")
