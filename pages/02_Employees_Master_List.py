@@ -11,7 +11,8 @@ import uuid
 from datetime import datetime
 import boto3
 import importlib
-import re
+import base64
+import html
 
 # --- Robust import of utils.data, with graceful fallbacks and clear errors ---
 _missing = []
@@ -25,20 +26,26 @@ except Exception as e:
     st.stop()
 
 def _require(name, *aliases):
-    """Return the first attribute that exists on data_mod; remember if missing."""
     for n in (name, *aliases):
         if hasattr(data_mod, n):
             return getattr(data_mod, n)
     _missing.append(name if not aliases else f"{name} (aliases tried: {', '.join(aliases)})")
     return None
 
-# Map to whatever exists in utils/data.py (kept for compatibility even if not used here)
 load_employees_from_dynamodb = _require("load_employees_from_dynamodb", "load_employees", "get_employees")
 update_employee_violations   = _require("update_employee_violations", "update_employee", "set_employee_violations")
 upsert_employee              = _require("upsert_employee", "put_employee", "create_or_update_employee")
 
-st.set_page_config(page_title="Employees (Master List)", page_icon="👥", layout="wide")
+if _missing:
+    st.error(
+        "Your `utils/data.py` is missing the following function(s): "
+        + ", ".join(f"`{m}`" for m in _missing)
+        + ".\n\nAdd them (or rename yours to match), then rerun."
+    )
+    st.stop()
 
+# --- Page config & header ---
+st.set_page_config(page_title="Employees (Master List)", page_icon="👥", layout="wide")
 st.title("👥 Employees (Master List)")
 st.caption("Directory of employees (DynamoDB: employee_master) with profile photos. Register new employees below.")
 
@@ -47,9 +54,9 @@ AWS_ACCESS_KEY = st.secrets.get("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_I
 AWS_SECRET_KEY = st.secrets.get("AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", ""))
 REGION         = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
 
-S3_BUCKET       = "ppe-detection-input"
-S3_PREFIX       = "employees"             # employees/<employee_id>.<ext>
-EMPLOYEE_TABLE  = "employee_master"       # table for employee profiles
+S3_BUCKET      = "ppe-detection-input"
+S3_PREFIX      = "employees"             # employees/<employee_id>.<ext>
+EMPLOYEE_TABLE = "employee_master"       # for profiles
 
 def _s3_client():
     return boto3.client(
@@ -68,39 +75,162 @@ def _ddb_table(name: str):
     )
     return ddb.Table(name)
 
-def _public_s3_url(key: str) -> str:
-    # Works for private objects if bucket policy allows it; for purely private buckets
-    # consider using presigned URLs instead.
-    if not key:
-        return ""
-    # us-east-1 is special; us-east-2 (your region) includes the region in the hostname
-    return f"https://{S3_BUCKET}.s3.{REGION}.amazonaws.com/{key}"
+# --- Helpers: photo handling ---
+def _presign_photo(key: str, expires=60 * 60 * 24 * 7) -> str | None:
+    """
+    Return a presigned GET URL for the S3 object key.
+    Requires IAM permission: s3:GetObject on the key.
+    """
+    try:
+        client = _s3_client()
+        return client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": S3_BUCKET, "Key": key},
+            ExpiresIn=expires,
+        )
+    except Exception:
+        return None
 
-def _make_employee_id_from_name(name: str) -> str:
-    # Not used now for final ID, but kept (do not delete)
+def _placeholder_avatar(name: str, size_px: int = 144) -> str:
+    """
+    Returns a data: URI for a simple SVG avatar (no S3 needed).
+    Used as a fallback when presigned GET is not permitted yet.
+    """
+    initials = "".join([w[0] for w in (name or "U").split()][:2]).upper()
+    initials = html.escape(initials)
+    svg = f'''
+    <svg xmlns="http://www.w3.org/2000/svg" width="{size_px}" height="{size_px}" viewBox="0 0 120 120">
+      <defs>
+        <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stop-color="#c7d2fe"/>
+          <stop offset="100%" stop-color="#93c5fd"/>
+        </linearGradient>
+      </defs>
+      <rect width="120" height="120" rx="16" fill="url(#g)"/>
+      <text x="50%" y="58%" text-anchor="middle" dominant-baseline="middle"
+            font-family="Inter,system-ui,-apple-system,Segoe UI,Roboto" font-size="56" fill="#0f172a">{initials}</text>
+    </svg>
+    '''
+    b64 = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{b64}"
+
+def _photo_src_for_row(photo_key: str | None, name: str) -> str:
+    """
+    Prefer a presigned URL (needs s3:GetObject). If that can't be created,
+    return a data: URI placeholder so we never show a broken image.
+    """
+    if photo_key:
+        url = _presign_photo(photo_key)
+        if url:
+            return url
+    return _placeholder_avatar(name)
+
+# ---------- DATA LOAD ----------
+@st.cache_data(ttl=30, show_spinner=False)
+def _cached_load_employees():
+    st.session_state.setdefault("_emp_load_count", 0)
+    st.session_state["_emp_load_count"] += 1
+    print(f"[info] Loading employees from DynamoDB (call #{st.session_state['_emp_load_count']})")
+    return load_employees_from_dynamodb()
+
+# ---------- SEARCH ----------
+q = st.text_input("Search employees", placeholder="Search by name, EmployeeID, department, site, email…")
+
+# ---------- DIRECTORY ----------
+df_raw = _cached_load_employees().copy()
+
+# Normalize columns expected here (defensive)
+for col in ["EmployeeID", "name", "department", "site", "job_title", "email", "status", "created_at", "photo_key"]:
+    if col not in df_raw.columns:
+        df_raw[col] = ""
+
+# Build photo source (presigned or placeholder)
+df_raw["Photo"] = [
+    _photo_src_for_row(row.get("photo_key"), row.get("name", "")) for _, row in df_raw.iterrows()
+]
+
+# Search filter
+if q:
+    ql = q.lower()
+    df_raw = df_raw[
+        df_raw.apply(
+            lambda r: any(
+                ql in str(r.get(c, "")).lower()
+                for c in ["EmployeeID", "name", "department", "site", "job_title", "email", "status"]
+            ),
+            axis=1,
+        )
+    ]
+
+# Reorder & rename for display
+df_dir = df_raw[
+    ["Photo", "EmployeeID", "name", "department", "site", "job_title", "email", "status", "created_at"]
+].rename(
+    columns={
+        "name": "Name",
+        "department": "Department",
+        "site": "Site",
+        "job_title": "Job title",
+        "email": "Email",
+        "status": "Status",
+        "created_at": "Created",
+    }
+).reset_index(drop=True)
+
+st.markdown("## Directory")
+
+# 3× larger photos (approx). ImageColumn width controls cell size.
+st.dataframe(
+    df_dir,
+    use_container_width=True,
+    column_config={
+        "Photo": st.column_config.ImageColumn(
+            "Photo",
+            width=144,              # ~3x the default small thumbs
+            help="Employee profile photo",
+        )
+    },
+    hide_index=True,
+)
+
+st.divider()
+
+# ------------------------
+# Quick add / upsert (kept as-is)
+# ------------------------
+st.subheader("Add employee")
+with st.form("add_emp_form", clear_on_submit=True):
+    c1, c2, c3 = st.columns([2,1,1])
+    new_emp_id = c1.text_input("New EmployeeID", placeholder="e.g., employee123")
+    new_emp_v = c2.number_input("Initial violations", min_value=0, value=0, step=1)
+    submitted = c3.form_submit_button("Add / Upsert")
+    if submitted:
+        if not new_emp_id.strip():
+            st.error("EmployeeID cannot be empty.")
+        else:
+            upsert_employee(new_emp_id.strip(), int(new_emp_v))
+            st.success(f"Upserted '{new_emp_id}' with violations={int(new_emp_v)}.")
+            st.cache_data.clear()
+
+# =====================================================================
+# NEW SECTION: Register new employee WITH ID photo (S3 + DynamoDB employee_master)
+# =====================================================================
+
+st.divider()
+st.subheader("Register new employee (with ID photo)")
+st.caption(
+    "Create a new employee profile with professional details and upload an ID photo. "
+    "The photo is stored in S3 at **ppe-detection-input/employees/** and the profile is saved to "
+    "**DynamoDB table `employee_master`** (separate from your violation tracker)."
+)
+
+def _make_employee_id(name: str) -> str:
+    # (kept the same logic you accepted earlier)
     slug = "".join(ch for ch in (name or "").lower() if ch.isalnum() or ch in ("-", "_"))
     slug = slug.replace("__", "_").strip("_") or "user"
     short = uuid.uuid4().hex[:4]
     date = datetime.utcnow().strftime("%Y%m%d")
     return f"EMP-{slug}-{date}-{short}"
-
-def _next_emp_id(existing_ids) -> str:
-    """
-    Create sequential IDs: emp01, emp02, ...
-    existing_ids: iterable of strings (EmployeeID values already in the table)
-    """
-    max_num = 0
-    for eid in existing_ids:
-        m = re.fullmatch(r"emp(\d+)", str(eid).lower().strip())
-        if m:
-            try:
-                num = int(m.group(1))
-                if num > max_num:
-                    max_num = num
-            except:
-                pass
-    nxt = max_num + 1
-    return f"emp{nxt:02d}"
 
 def _put_photo_to_s3(employee_id: str, file, filename: str) -> str:
     ext = os.path.splitext(filename)[1].lower() or ".jpg"
@@ -123,112 +253,20 @@ def _put_photo_to_s3(employee_id: str, file, filename: str) -> str:
     return key
 
 def _upsert_employee_profile_to_master(employee_id: str, payload: dict):
-    """Write the profile to employee_master (separate table)."""
     tbl = _ddb_table(EMPLOYEE_TABLE)
     item = {
-        "EmployeeID": employee_id,           # PK
+        "EmployeeID": employee_id,
         "name": payload.get("name"),
         "department": payload.get("department"),
         "site": payload.get("site"),
         "job_title": payload.get("job_title"),
         "email": payload.get("email"),
         "photo_key": payload.get("photo_key"),
-        "created_at": payload.get("created_at"),  # ISO8601
+        "created_at": payload.get("created_at"),
         "status": payload.get("status", "Active"),
     }
     tbl.put_item(Item=item)
 
-@st.cache_data(ttl=30, show_spinner=False)
-def _cached_directory() -> pd.DataFrame:
-    """Scan employee_master and return a display-ready DataFrame."""
-    tbl = _ddb_table(EMPLOYEE_TABLE)
-
-    items = []
-    scan_kwargs = {}
-    while True:
-        resp = tbl.scan(**scan_kwargs)
-        items.extend(resp.get("Items", []))
-        if "LastEvaluatedKey" in resp:
-            scan_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
-        else:
-            break
-
-    if not items:
-        return pd.DataFrame(columns=[
-            "Photo", "EmployeeID", "Name", "Department", "Site",
-            "Job title", "Email", "Status", "Created"
-        ])
-
-    def to_row(it):
-        return {
-            "Photo": _public_s3_url(it.get("photo_key", "")),
-            "EmployeeID": it.get("EmployeeID", ""),
-            "Name": it.get("name", ""),
-            "Department": it.get("department", ""),
-            "Site": it.get("site", ""),
-            "Job title": it.get("job_title", ""),
-            "Email": it.get("email", ""),
-            "Status": it.get("status", "Active"),
-            "Created": it.get("created_at", ""),
-        }
-
-    df = pd.DataFrame([to_row(x) for x in items]).sort_values("EmployeeID")
-    return df.reset_index(drop=True)
-
-# ---------------------------------------
-# Search + Directory (with bigger photos)
-# ---------------------------------------
-search = st.text_input(
-    "Search employees",
-    placeholder="Search by name, EmployeeID, department, site, email…"
-)
-
-df_dir = _cached_directory()
-
-if search:
-    s = search.strip().lower()
-    mask = pd.Series([False] * len(df_dir))
-    for col in ["EmployeeID", "Name", "Department", "Site", "Job title", "Email", "Status", "Created"]:
-        mask = mask | df_dir[col].astype(str).str.lower().str.contains(s, na=False)
-    df_dir = df_dir[mask]
-
-DISPLAY_COLS = ["Photo", "EmployeeID", "Name", "Department", "Site", "Job title", "Email", "Status", "Created"]
-
-st.subheader("Directory")
-if df_dir.empty:
-    st.info("No employees found yet. Use the form below to register the first employee.")
-else:
-    # Build table for display
-    grid_df = df_dir.reindex(columns=DISPLAY_COLS)
-
-    # 🔎 Make Photo column render 3× larger thumbnails by embedding <img width="120">
-    def make_img_tag(url):
-        if not url:
-            return ""
-        return f'<img src="{url}" width="120" style="border-radius:10px;"/>'
-
-    grid_df = grid_df.copy()
-    grid_df["Photo"] = grid_df["Photo"].apply(make_img_tag)
-
-    # Optional minimal table styling
-    st.markdown(
-        """
-        <style>
-          table.emp-dir {border-collapse: collapse; width: 100%;}
-          table.emp-dir th, table.emp-dir td {padding: 10px 12px; border-bottom: 1px solid #eef2f7; text-align: left;}
-          table.emp-dir th {background:#f8fafc; font-weight:700;}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(grid_df.to_html(escape=False, index=False, classes="emp-dir"), unsafe_allow_html=True)
-
-st.divider()
-
-# ------------------------
-# Register new employee
-# ------------------------
-st.subheader("Add employee  ↪")
 with st.form("register_employee_form", clear_on_submit=False, border=True):
     cL, cR = st.columns([1.2, 1])
     with cL:
@@ -246,7 +284,7 @@ with st.form("register_employee_form", clear_on_submit=False, border=True):
         st.markdown("**Employee ID photo**")
         photo = st.file_uploader("Upload image", type=["jpg", "jpeg", "png", "webp"])
         if photo is not None:
-            st.image(photo, caption="Preview", width=220)
+            st.image(photo, caption="Preview", width=260)
 
     submit_new_emp = st.form_submit_button("Create employee", type="primary")
 
@@ -258,13 +296,7 @@ if submit_new_emp:
         st.error("Please upload an employee ID photo.")
         st.stop()
 
-    # Create sequential EmployeeID like emp01, emp02, ...
-    try:
-        existing = _cached_directory()["EmployeeID"].tolist()
-    except Exception:
-        existing = []
-    employee_id = _next_emp_id(existing)
-
+    employee_id = _make_employee_id(full_name)  # automatic
     created_at  = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
     try:
@@ -289,7 +321,7 @@ if submit_new_emp:
         with s1:
             if photo is not None:
                 photo.seek(0)
-                st.image(photo, width=240)
+                st.image(photo, width=220)
         with s2:
             st.markdown(
                 f"""
@@ -304,6 +336,5 @@ if submit_new_emp:
                 """
             )
         st.info("Profile saved to `employee_master`. You can now associate detections with this EmployeeID.")
-        st.cache_data.clear()  # refresh the directory
     except Exception as e:
         st.error(f"Something went wrong while creating the employee: {e}")
