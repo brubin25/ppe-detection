@@ -1,119 +1,108 @@
-import streamlit as st
-import boto3
+# utils/data.py
 import os
-import time
-import uuid
-import mimetypes
+from decimal import Decimal
+from typing import Dict, Any, List
 
-# ------------------------
-# PAGE CONFIG
-# ------------------------
-st.set_page_config(page_title="Detect PPE (Upload)", page_icon="🦺", layout="wide")
+import boto3
+import pandas as pd
+import streamlit as st
 
-# ------------------------
-# AWS CONFIG — read like the reference (from st.secrets), with safe fallbacks
-# ------------------------
+# -----------------------------
+# Config (matches the rest of app)
+# -----------------------------
 AWS_ACCESS_KEY = st.secrets.get("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID", ""))
 AWS_SECRET_KEY = st.secrets.get("AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", ""))
-REGION        = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
+REGION         = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
 
-# keep your original bucket/prefix values
-BUCKET_NAME   = "ppe-detection-input"
-UPLOAD_PREFIX = "uploads/"
+# ✅ Use the employee profile table (not PPEViolationTracker)
+EMPLOYEE_TABLE = "employee_master"
 
-# ------------------------
-# STYLES
-# ------------------------
-st.markdown("""
-    <style>
-        .stApp {
-            background: linear-gradient(135deg, #f5f9ff, #ffffff);
-        }
-        .upload-box {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        }
-        .stButton button {
-            background-color: #2563eb;
-            color: white;
-            font-weight: 600;
-            border-radius: 8px;
-            padding: 0.6rem 1.2rem;
-        }
-        .stButton button:hover {
-            background-color: #1e4ed8;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# ------------------------
-# HEADER
-# ------------------------
-st.title("🦺 Detect PPE (Upload)")
-st.caption("Upload an image to check compliance using AWS Rekognition.")
-
-# ------------------------
-# S3 CLIENT (uses credentials loaded above)
-# ------------------------
-def s3_client():
-    return boto3.client(
-        "s3",
-        aws_access_key_id=AWS_ACCESS_KEY,
-        aws_secret_access_key=AWS_SECRET_KEY,
+# -----------------------------
+# Dynamo helpers
+# -----------------------------
+def _ddb_resource():
+    return boto3.resource(
+        "dynamodb",
         region_name=REGION,
+        aws_access_key_id=AWS_ACCESS_KEY or None,
+        aws_secret_access_key=AWS_SECRET_KEY or None,
     )
 
-def unique_key(filename: str) -> str:
-    ext = os.path.splitext(filename)[1].lower()
-    return f"{UPLOAD_PREFIX}{int(time.time())}-{uuid.uuid4().hex[:8]}{ext}"
+def _table():
+    return _ddb_resource().Table(EMPLOYEE_TABLE)
 
-def guess_content_type(filename: str) -> str:
-    # Try to infer correct content-type; fallback to 'application/octet-stream'
-    ctype, _ = mimetypes.guess_type(filename)
-    return ctype or "application/octet-stream"
+def _as_int(v) -> int:
+    if isinstance(v, Decimal):
+        return int(v)
+    try:
+        return int(v)
+    except Exception:
+        return 0
 
-# ------------------------
-# UPLOAD UI (unchanged logic/flow)
-# ------------------------
-with st.container():
-    st.markdown('<div class="upload-box">', unsafe_allow_html=True)
+# -----------------------------
+# Public API (used by pages)
+# -----------------------------
+def load_employees_from_dynamodb() -> pd.DataFrame:
+    """
+    Scan employee_master and return a DataFrame with:
+      - EmployeeID (PK)
+      - violations (default 0 if missing)
+    Other profile fields are ignored here (the master list page only needs these).
+    """
+    tbl = _table()
 
-    uploaded_file = st.file_uploader("📂 Choose an image", type=["jpg", "jpeg", "png"])
-    use_camera = st.toggle("📸 Use camera")
-    camera_img = st.camera_input("Take a photo") if use_camera else None
+    items: List[Dict[str, Any]] = []
+    scan_kwargs: Dict[str, Any] = {}
+    while True:
+        resp = tbl.scan(**scan_kwargs)
+        items.extend(resp.get("Items", []))
+        if "LastEvaluatedKey" in resp:
+            scan_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+        else:
+            break
 
-    file_bytes = None
-    original_name = None
+    rows = []
+    for it in items:
+        emp_id = it.get("EmployeeID") or it.get("employee_id")
+        if not emp_id:
+            continue
+        vio = _as_int(it.get("violations", 0))
+        rows.append({"EmployeeID": str(emp_id), "violations": vio})
 
-    if camera_img is not None:
-        file_bytes = camera_img.getvalue()
-        original_name = "camera_capture.png"
-    elif uploaded_file is not None:
-        file_bytes = uploaded_file.getvalue()
-        original_name = uploaded_file.name
+    if not rows:
+        return pd.DataFrame(columns=["EmployeeID", "violations"])
 
-    if file_bytes:
-        st.image(file_bytes, caption="Preview", use_column_width=True)
-        if st.button("⬆️ Upload to S3"):
-            # sanity check for creds like the reference flow expects
-            if not AWS_ACCESS_KEY or not AWS_SECRET_KEY:
-                st.error("❌ AWS credentials not found. Please add them in `.streamlit/secrets.toml`.")
-            else:
-                key = unique_key(original_name)
-                try:
-                    with st.spinner("Uploading to S3…"):
-                        s3 = s3_client()
-                        s3.put_object(
-                            Bucket=BUCKET_NAME,
-                            Key=key,
-                            Body=file_bytes,
-                            ContentType=guess_content_type(original_name),
-                        )
-                    st.success(f"✅ Uploaded to s3://{BUCKET_NAME}/{key}")
-                    st.info("Your Lambda function will now process PPE detection.")
-                except Exception as e:
-                    st.error(f"❌ Upload failed: {e}")
+    return (
+        pd.DataFrame(rows)
+        .drop_duplicates(subset=["EmployeeID"], keep="last")
+        .reset_index(drop=True)
+    )
 
-    st.markdown('</div>', unsafe_allow_html=True)
+
+def update_employee_violations(employee_id: str, violations: int) -> None:
+    """
+    Update only the 'violations' attribute for the given EmployeeID in employee_master.
+    (Keeps all other profile fields intact.)
+    """
+    tbl = _table()
+    tbl.update_item(
+        Key={"EmployeeID": employee_id},
+        UpdateExpression="SET #v = :v",
+        ExpressionAttributeNames={"#v": "violations"},
+        ExpressionAttributeValues={":v": int(violations)},
+    )
+
+
+def upsert_employee(employee_id: str, violations: int = 0) -> None:
+    """
+    Create if missing, or update if exists, the 'violations' field for EmployeeID
+    in employee_master. This does NOT overwrite other fields (name, department, etc.).
+    """
+    tbl = _table()
+    # Using UpdateItem acts as an upsert without clobbering other attributes.
+    tbl.update_item(
+        Key={"EmployeeID": str(employee_id)},
+        UpdateExpression="SET #v = :v",
+        ExpressionAttributeNames={"#v": "violations"},
+        ExpressionAttributeValues={":v": int(violations)},
+    )
