@@ -1,4 +1,3 @@
-# pages/02_Employees_Master_List.py
 import streamlit as st
 import pandas as pd
 
@@ -154,7 +153,7 @@ if df_dir.empty:
 else:
     grid_df = df_dir.reindex(columns=DISPLAY_COLS)
 
-# >>> ONLY CHANGE: make the photo thumbnails ~3× larger
+# Enlarged photo thumbnails
 st.subheader("Directory")
 if grid_df.empty:
     st.info("No employees found yet. Use the form below to register the first employee.")
@@ -167,7 +166,7 @@ else:
             "Photo": st.column_config.ImageColumn(
                 "Photo",
                 help="Employee photo",
-                width=288,          # ← bigger thumbnails (about 3× the tiny default)
+                width=288,          # enlarged to ~3×
             ),
             "EmployeeID": st.column_config.TextColumn("EmployeeID"),
             "Name": st.column_config.TextColumn("Name"),
@@ -183,7 +182,7 @@ else:
 st.divider()
 
 # ------------------------
-# Quick add / upsert (unchanged)
+# Quick add / upsert
 # ------------------------
 st.subheader("Add employee")
 with st.form("add_emp_form", clear_on_submit=True):
@@ -238,14 +237,14 @@ def _upsert_employee_profile_to_master(employee_id: str, payload: dict):
     """Write/overwrite the profile to employee_master (separate table)."""
     tbl = _ddb_table(EMPLOYEE_TABLE)
     item = {
-        "EmployeeID": employee_id,           # PK
+        "EmployeeID": employee_id,
         "name": payload.get("name"),
         "department": payload.get("department"),
         "site": payload.get("site"),
         "job_title": payload.get("job_title"),
         "email": payload.get("email"),
         "photo_key": payload.get("photo_key"),
-        "created_at": payload.get("created_at"),  # ISO8601
+        "created_at": payload.get("created_at"),
         "status": payload.get("status", "Active"),
     }
     tbl.put_item(Item=item)
