@@ -8,11 +8,8 @@ import uuid
 from datetime import datetime
 import boto3
 
-from utils.data import (
-    load_employees_from_dynamodb,
-    update_employee_violations,
-    upsert_employee,
-)
+from utils.data import load_employees_from_dynamodb, update_employee_violations, upsert_employee
+
 
 st.set_page_config(page_title="Employees (Master List)", page_icon="👥", layout="wide")
 st.title("👥 Employees (Master List)")
