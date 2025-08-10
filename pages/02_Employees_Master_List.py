@@ -154,7 +154,7 @@ if df_dir.empty:
 else:
     grid_df = df_dir.reindex(columns=DISPLAY_COLS)
 
-# Professional table with larger photo thumbnails (≈3× current)
+# Professional table with even larger photo thumbnails (3×)
 st.subheader("Directory")
 if grid_df.empty:
     st.info("No employees found yet. Use the form below to register the first employee.")
@@ -167,7 +167,7 @@ else:
             "Photo": st.column_config.ImageColumn(
                 "Photo",
                 help="Employee photo",
-                width=240,          # bigger thumbnails (~3×)
+                width=480,          # << enlarged to ~3×
             ),
             "EmployeeID": st.column_config.TextColumn("EmployeeID"),
             "Name": st.column_config.TextColumn("Name"),
@@ -183,7 +183,7 @@ else:
 st.divider()
 
 # ------------------------
-# Quick add / upsert (kept as-is from your original master list page)
+# Quick add / upsert (unchanged)
 # ------------------------
 st.subheader("Add employee")
 with st.form("add_emp_form", clear_on_submit=True):
@@ -195,23 +195,18 @@ with st.form("add_emp_form", clear_on_submit=True):
         if not new_emp_id.strip():
             st.error("EmployeeID cannot be empty.")
         else:
-            # Delegate to your existing utils function (logic unchanged)
             upsert_employee(new_emp_id.strip(), int(new_emp_v))
             st.success(f"Upserted '{new_emp_id}' with violations={int(new_emp_v)}.")
             st.cache_data.clear()
 
 # =====================================================================
-# NEW SECTION: Register new employee WITH ID photo (S3 + DynamoDB employee_master)
+# Register new employee WITH ID photo (S3 + DynamoDB employee_master)
 # =====================================================================
 
 def _make_employee_id_sequential(df_master: pd.DataFrame) -> str:
-    """
-    Generate sequential IDs emp01, emp02, … based on what exists in employee_master.
-    Works when the table is empty (returns emp01).
-    """
+    """Generate sequential IDs emp01, emp02, … based on what exists; works when table is empty."""
     if df_master.empty or "EmployeeID" not in df_master:
         return "emp01"
-    # Parse existing IDs like empNN
     nums = []
     for e in df_master["EmployeeID"].astype(str):
         if e.lower().startswith("emp") and e[3:].isdigit():
@@ -291,7 +286,6 @@ if submit_new_emp:
         st.error("Please upload an employee ID photo.")
         st.stop()
 
-    # Make a sequential EmployeeID (emp01…)
     employee_id = _make_employee_id_sequential(_cached_directory())
     created_at  = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
