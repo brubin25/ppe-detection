@@ -166,7 +166,7 @@ else:
             "Photo": st.column_config.ImageColumn(
                 "Photo",
                 help="Employee photo",
-                width=400,          # enlarged to ~3×
+                width=480,          # tripled size (~3× bigger than before)
             ),
             "EmployeeID": st.column_config.TextColumn("EmployeeID"),
             "Name": st.column_config.TextColumn("Name"),
@@ -178,6 +178,7 @@ else:
             "Created": st.column_config.TextColumn("Created"),
         },
     )
+
 
 st.divider()
 
