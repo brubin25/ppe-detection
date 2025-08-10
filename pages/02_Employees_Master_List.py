@@ -2,14 +2,20 @@
 import streamlit as st
 import pandas as pd
 
+# --- Ensure Python can import from the project root (so utils.data works on Streamlit Cloud) ---
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 # NEW: imports for S3 & DynamoDB upload of employee photo + profile
-import os
 import uuid
 from datetime import datetime
 import boto3
 
-from utils.data import load_employees_from_dynamodb, update_employee_violations, upsert_employee
-
+from utils.data import (
+    load_employees_from_dynamodb,
+    update_employee_violations,
+    upsert_employee,
+)
 
 st.set_page_config(page_title="Employees (Master List)", page_icon="👥", layout="wide")
 st.title("👥 Employees (Master List)")
