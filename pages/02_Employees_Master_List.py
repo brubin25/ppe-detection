@@ -167,7 +167,7 @@ else:
             "Photo": st.column_config.ImageColumn(
                 "Photo",
                 help="Employee photo",
-                width=192,          # ← bigger thumbnails (about 3× the tiny default)
+                width=288,          # ← bigger thumbnails (about 3× the tiny default)
             ),
             "EmployeeID": st.column_config.TextColumn("EmployeeID"),
             "Name": st.column_config.TextColumn("Name"),
