@@ -147,11 +147,11 @@ if search:
         mask = mask | df_dir[col].astype(str).str.lower().str.contains(s, na=False)
     df_dir = df_dir[mask]
 
-# ✅ Sort by Created (descending; newest first)
+# ✅ Sort by Created (ascending; oldest first)
 if not df_dir.empty and "Created" in df_dir.columns:
     try:
         df_dir["Created_dt"] = pd.to_datetime(df_dir["Created"], errors="coerce")
-        df_dir = df_dir.sort_values(by="Created_dt", ascending=False).drop(columns=["Created_dt"])
+        df_dir = df_dir.sort_values(by="Created_dt", ascending=True).drop(columns=["Created_dt"])
     except Exception as e:
         st.warning(f"Could not sort by creation date: {e}")
 
