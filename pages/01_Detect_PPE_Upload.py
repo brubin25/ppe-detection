@@ -1,64 +1,81 @@
 import streamlit as st
-import pandas as pd
-
-# --- Make sure /utils is importable from inside /pages on Streamlit Cloud ---
-import sys, os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-# NEW: imports for S3 & DynamoDB upload of employee photo + profile
-import uuid
-from datetime import datetime
 import boto3
-import importlib
+import os
+import time
+import uuid
+import mimetypes
+from datetime import datetime
+import random
 
-# --- Robust import of utils.data, with graceful fallbacks and clear errors ---
-_missing = []
-try:
-    data_mod = importlib.import_module("utils.data")
-except Exception as e:
-    st.error(
-        "Couldn't import `utils.data`. Make sure the repo has a `utils/` folder "
-        "with `__init__.py` and `data.py` in it. Error: {}".format(e)
-    )
-    st.stop()
+# ✅ Auth guard (kept minimal; doesn’t change your logic)
+from auth import require_login
 
-def _require(name, *aliases):
-    """Return the first attribute that exists on data_mod; remember if missing."""
-    for n in (name, *aliases):
-        if hasattr(data_mod, n):
-            return getattr(data_mod, n)
-    _missing.append(name if not aliases else f"{name} (aliases tried: {', '.join(aliases)})")
-    return None
+# ------------------------
+# PAGE CONFIG
+# ------------------------
+st.set_page_config(page_title="Detect PPE (Upload)", page_icon="🦺", layout="wide")
 
-# Map to whatever exists in utils/data.py (kept for your existing master list logic)
-load_employees_from_dynamodb = _require("load_employees_from_dynamodb", "load_employees", "get_employees")
-update_employee_violations   = _require("update_employee_violations", "update_employee", "set_employee_violations")
-upsert_employee              = _require("upsert_employee", "put_employee", "create_or_update_employee")
+# Require login for this page (homepage can remain public)
+require_login()
 
-if _missing:
-    st.error(
-        "Your `utils/data.py` is missing the following function(s): "
-        + ", ".join(f"`{m}`" for m in _missing)
-        + ".\n\nAdd them (or rename yours to match), then rerun."
-    )
-    st.stop()
-
-st.set_page_config(page_title="Employees (Master List)", page_icon="👥", layout="wide")
-st.title("👥👥 Employees (Master List)")
-st.caption("Directory of employees (DynamoDB: employee_master) with profile photos. Register new employees below.")
-
-# --- AWS config (reads secrets w/ env fallbacks) ---
+# ------------------------
+# AWS CONFIG — like your reference (secrets with env fallbacks)
+# ------------------------
 AWS_ACCESS_KEY = st.secrets.get("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID", ""))
 AWS_SECRET_KEY = st.secrets.get("AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", ""))
-REGION        = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
+REGION         = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
 
-S3_BUCKET        = "ppe-detection-input"
-S3_PREFIX        = "employees"             # employees/<employee_id>.<ext>
-EMPLOYEE_TABLE   = "employee_master"       # table that holds employee directory
+BUCKET_NAME    = "ppe-detection-input"
+UPLOAD_PREFIX  = "uploads/"  # all uploads go under uploads/
 
-DISPLAY_COLS = ["Photo", "EmployeeID", "Name", "Department", "Site", "Job title", "Email", "Status", "Created"]
+# Normalize to ensure single trailing slash (safety guard; doesn't change behavior)
+if not UPLOAD_PREFIX.endswith("/"):
+    UPLOAD_PREFIX = UPLOAD_PREFIX + "/"
 
-def _s3_client():
+# ------------------------
+# CONSTANTS
+# ------------------------
+PREVIEW_WIDTH_PX = 380  # ~¼ of a wide monitor
+
+# ------------------------
+# STYLES
+# ------------------------
+st.markdown("""
+<style>
+  .stApp { background: linear-gradient(135deg, #f5f9ff, #ffffff); }
+  .upload-box {
+    background: white; padding: 20px; border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+  .panel {
+    background: white; padding: 20px; border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+  .stButton button {
+    background-color: #2563eb; color: white; font-weight: 600;
+    border-radius: 8px; padding: 0.6rem 1.2rem;
+  }
+  .stButton button:hover { background-color: #1e4ed8; }
+  .label { color:#64748b; font-size:13px; text-transform:uppercase; letter-spacing:.04em; }
+  .value { font-weight:700; color:#0f172a; font-size:16px; }
+  .chip {
+    display:inline-block; padding:4px 10px; border-radius:999px;
+    border:1px solid #e5e7eb; margin-right:6px; margin-bottom:6px; background:#fff;
+    font-size:12px; color:#0f172a;
+  }
+</style>
+""", unsafe_allow_html=True)
+
+# ------------------------
+# HEADER
+# ------------------------
+st.title("🦺 Detect PPE (Upload)")
+st.caption("Upload a photo and see the detection result appear on the right.")
+
+# ------------------------
+# HELPERS
+# ------------------------
+def s3_client():
     return boto3.client(
         "s3",
         aws_access_key_id=AWS_ACCESS_KEY,
@@ -66,264 +83,159 @@ def _s3_client():
         region_name=REGION,
     )
 
-def _ddb_table(name: str):
-    ddb = boto3.resource(
-        "dynamodb",
-        aws_access_key_id=AWS_ACCESS_KEY,
-        aws_secret_access_key=AWS_SECRET_KEY,
-        region_name=REGION,
-    )
-    return ddb.Table(name)
+def unique_key(filename: str) -> str:
+    ext = os.path.splitext(filename)[1].lower()
+    # Build a key under uploads/: uploads/<timestamp>-<uuid>.<ext>
+    return f"{UPLOAD_PREFIX}{int(time.time())}-{uuid.uuid4().hex[:8]}{ext}"
 
-def _presigned_url(key: str, expires=3600) -> str | None:
-    if not key:
-        return None
-    try:
-        s3 = _s3_client()
-        return s3.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": S3_BUCKET, "Key": key},
-            ExpiresIn=expires,
-        )
-    except Exception:
-        return None
+def guess_content_type(filename: str) -> str:
+    ctype, _ = mimetypes.guess_type(filename)
+    return ctype or "application/octet-stream"
 
-def _scan_employee_master() -> pd.DataFrame:
-    """Read employee_master and return normalized DataFrame."""
-    tbl = _ddb_table(EMPLOYEE_TABLE)
-    items = []
-    start_key = None
-    while True:
-        if start_key:
-            resp = tbl.scan(ExclusiveStartKey=start_key)
-        else:
-            resp = tbl.scan()
-        items.extend(resp.get("Items", []))
-        start_key = resp.get("LastEvaluatedKey")
-        if not start_key:
-            break
+def fake_rekognition_response(image_key: str):
+    """
+    Placeholder shape for what a Rekognition/Lambda result might return.
+    Extend/replace this with your real JSON shape when you hook up to your backend.
+    """
+    base = os.path.splitext(os.path.basename(image_key))[0] or "Unknown"
+    # Randomize a little for demo feel
+    all_items = ["Hard Hat", "Safety Vest", "Safety Glasses", "Gloves", "Ear Protection"]
+    missing = ["No Helmet", "No Safety Vest"]  # example violations
+    present = [i for i in all_items if ("No " + i.replace(" ", "")) not in missing]
+    confidence = round(random.uniform(92.5, 99.5), 1)
 
-    if not items:
-        # Return an empty dataframe with the display columns to avoid KeyError downstream
-        return pd.DataFrame(columns=DISPLAY_COLS)
-
-    rows = []
-    for it in items:
-        rows.append(
-            {
-                "EmployeeID": it.get("EmployeeID", ""),
-                "Name": it.get("name", ""),
-                "Department": it.get("department", ""),
-                "Site": it.get("site", ""),
-                "Job title": it.get("job_title", ""),
-                "Email": it.get("email", ""),
-                "Status": it.get("status", ""),
-                "Created": it.get("created_at", ""),
-                "Photo": _presigned_url(it.get("photo_key", "")),
-            }
-        )
-    df = pd.DataFrame(rows)
-
-    # Ensure all DISPLAY_COLS exist (even if some items lack fields)
-    for c in DISPLAY_COLS:
-        if c not in df.columns:
-            df[c] = ""
-    return df
-
-@st.cache_data(ttl=30, show_spinner=False)
-def _cached_directory():
-    return _scan_employee_master()
-
-# ======= Search / Directory =======
-search = st.text_input("Search employees", placeholder="Search by name, EmployeeID, department, site, email…")
-
-df_dir = _cached_directory()
-
-# Apply search filter (works even when empty)
-if search:
-    s = search.strip().lower()
-    mask = pd.Series([False] * len(df_dir))
-    for col in ["EmployeeID", "Name", "Department", "Site", "Job title", "Email", "Status", "Created"]:
-        mask = mask | df_dir[col].astype(str).str.lower().str.contains(s, na=False)
-    df_dir = df_dir[mask]
-
-# Keep the column order and avoid KeyError even when empty
-if df_dir.empty:
-    grid_df = pd.DataFrame(columns=DISPLAY_COLS)
-else:
-    grid_df = df_dir.reindex(columns=DISPLAY_COLS)
-
-# NEW: add the running index column as the first column (1..n)
-if grid_df.empty:
-    grid_df_display = pd.DataFrame(columns=["#"] + DISPLAY_COLS)
-else:
-    grid_df_display = grid_df.copy().reset_index(drop=True)
-    grid_df_display.insert(0, "#", range(1, len(grid_df_display) + 1))
-
-# Enlarged photo thumbnails
-st.subheader("Directory")
-if grid_df_display.empty:
-    st.info("No employees found yet. Use the form below to register the first employee.")
-else:
-    st.dataframe(
-        grid_df_display,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "#": st.column_config.NumberColumn("#", help="Row number", format="%d", width=70),  # NEW
-            "Photo": st.column_config.ImageColumn(
-                "Photo",
-                help="Employee photo",
-                width=288,          # enlarged to ~3×
-            ),
-            "EmployeeID": st.column_config.TextColumn("EmployeeID"),
-            "Name": st.column_config.TextColumn("Name"),
-            "Department": st.column_config.TextColumn("Department"),
-            "Site": st.column_config.TextColumn("Site"),
-            "Job title": st.column_config.TextColumn("Job title"),
-            "Email": st.column_config.TextColumn("Email"),
-            "Status": st.column_config.TextColumn("Status"),
-            "Created": st.column_config.TextColumn("Created"),
-        },
-    )
-
-st.divider()
-
-# =====================================================================
-# Register new employee WITH ID photo (S3 + DynamoDB employee_master)
-# =====================================================================
-
-def _make_employee_id_sequential(df_master: pd.DataFrame) -> str:
-    """Generate sequential IDs emp01, emp02, … based on what exists; works when table is empty."""
-    if df_master.empty or "EmployeeID" not in df_master:
-        return "emp01"
-    nums = []
-    for e in df_master["EmployeeID"].astype(str):
-        if e.lower().startswith("emp") and e[3:].isdigit():
-            nums.append(int(e[3:]))
-    nxt = (max(nums) + 1) if nums else 1
-    return f"emp{nxt:02d}"
-
-def _put_photo_to_s3(employee_id: str, file, filename: str) -> str:
-    ext = os.path.splitext(filename)[1].lower() or ".jpg"
-    if ext not in (".jpg", ".jpeg", ".png", ".webp"):
-        ext = ".jpg"
-    key = f"{S3_PREFIX}/{employee_id}{ext}"
-    content_type = {
-        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-        ".png": "image/png", ".webp": "image/webp",
-    }.get(ext, "application/octet-stream")
-    s3 = _s3_client()
-    file.seek(0)
-    s3.put_object(
-        Bucket=S3_BUCKET,
-        Key=key,
-        Body=file.read(),
-        ContentType=content_type,
-        ACL="private",
-    )
-    return key
-
-def _upsert_employee_profile_to_master(employee_id: str, payload: dict):
-    """Write/overwrite the profile to employee_master (separate table)."""
-    tbl = _ddb_table(EMPLOYEE_TABLE)
-    item = {
-        "EmployeeID": employee_id,
-        "name": payload.get("name"),
-        "department": payload.get("department"),
-        "site": payload.get("site"),
-        "job_title": payload.get("job_title"),
-        "email": payload.get("email"),
-        "photo_key": payload.get("photo_key"),
-        "created_at": payload.get("created_at"),
-        "status": payload.get("status", "Active"),
+    return {
+        "employee_id": f"EMP-{random.randint(10000, 99999)}",
+        "name": base.replace("_", " ").title(),
+        "department": "Manufacturing",
+        "site": "Plant 3",
+        "shift": "Night",
+        "zone": "Line A",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "Non-Compliant" if missing else "Compliant",
+        "violations": missing,
+        "ppe_detected": ["Safety Glasses", "Gloves"],  # example present PPE
+        "model_confidence": confidence,                # top-level overall score
+        "image_key": image_key,                        # show the real S3 object key
     }
-    tbl.put_item(Item=item)
 
-st.subheader("Register new employee (with ID photo)")
-st.caption(
-    "Create a new employee profile with professional details and upload an ID photo. "
-    "The photo is stored in S3 at **ppe-detection-input/employees/** and the profile is saved to "
-    "**DynamoDB table `employee_master`**."
-)
+# ------------------------
+# LAYOUT: LEFT (upload + preview) | RIGHT (result)
+# ------------------------
+left, right = st.columns([6, 5])
 
-with st.form("register_employee_form", clear_on_submit=False, border=True):
-    cL, cR = st.columns([1.2, 1])
-    with cL:
-        full_name  = st.text_input("Full name", placeholder="e.g., Jordan Alvarez", max_chars=80)
-        department = st.selectbox(
-            "Department",
-            ["Manufacturing", "Maintenance", "Quality", "Logistics", "Safety", "Other"],
-            index=0,
-        )
-        site       = st.text_input("Site / Location", placeholder="e.g., Plant 3")
-        job_title  = st.text_input("Job title (optional)", placeholder="e.g., Line Operator")
-        work_email = st.text_input("Work email (optional)", placeholder="e.g., user@company.com")
+# A mutable placeholder for the result dictionary
+result = None
 
-    with cR:
-        st.markdown("**Employee ID photo**")
-        photo = st.file_uploader("Upload image", type=["jpg", "jpeg", "png", "webp"])
-        if photo is not None:
-            st.image(photo, caption="Preview", width=260)
+with left:
+    st.markdown('<div class="upload-box">', unsafe_allow_html=True)
 
-    submit_new_emp = st.form_submit_button("Create employee", type="primary")
+    uploaded_file = st.file_uploader("📂 Choose an image", type=["jpg", "jpeg", "png"])
+    use_camera = st.toggle("📸 Use camera")
+    camera_img = st.camera_input("Take a photo") if use_camera else None
 
-if submit_new_emp:
-    if not full_name.strip():
-        st.error("Please provide the employee's full name.")
-        st.stop()
-    if photo is None:
-        st.error("Please upload an employee ID photo.")
-        st.stop()
+    file_bytes = None
+    original_name = None
 
-    employee_id = _make_employee_id_sequential(_cached_directory())
-    created_at  = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    if camera_img is not None:
+        file_bytes = camera_img.getvalue()
+        original_name = "camera_capture.png"
+    elif uploaded_file is not None:
+        file_bytes = uploaded_file.getvalue()
+        original_name = uploaded_file.name
 
-    try:
-        with st.spinner("Uploading photo to S3…"):
-            photo_key = _put_photo_to_s3(employee_id, photo, photo.name)
+    if file_bytes:
+        st.markdown("**Preview**")
+        st.image(file_bytes, caption=None, width=PREVIEW_WIDTH_PX)
 
-        with st.spinner("Saving employee profile to DynamoDB (employee_master)…"):
-            payload = {
-                "name": full_name,
-                "department": department,
-                "site": site,
-                "job_title": job_title or None,
-                "email": work_email or None,
-                "photo_key": photo_key,
-                "created_at": created_at,
-                "status": "Active",
-            }
-            _upsert_employee_profile_to_master(employee_id, payload)
+        if st.button("⬆️ Upload to S3", type="primary"):
+            if not AWS_ACCESS_KEY or not AWS_SECRET_KEY:
+                st.error("❌ AWS credentials not found. Please add them in `.streamlit/secrets.toml`.")
+            else:
+                key = unique_key(original_name)  # ← uploads/<timestamp>-<uuid>.<ext>
+                try:
+                    with st.spinner("Uploading…"):
+                        s3 = s3_client()
+                        s3.put_object(
+                            Bucket=BUCKET_NAME,
+                            Key=key,
+                            Body=file_bytes,
+                            ContentType=guess_content_type(original_name),
+                        )
+                    st.success("✅ Uploaded successfully. PPE analysis will start shortly.")
+                    # Simulate/attach a detection response (pass key so it shows where it landed)
+                    result = fake_rekognition_response(key)
+                except Exception as e:
+                    st.error(f"❌ Upload failed: {e}")
 
-        st.success("Employee created successfully.")
-        s1, s2 = st.columns([1, 2])
-        with s1:
-            if photo is not None:
-                photo.seek(0)
-                st.image(photo, width=220)
-        with s2:
-            st.markdown(
-                f"""
-**EmployeeID:** `{employee_id}`  
-**Name:** {full_name}  
-**Department:** {department}  
-**Site:** {site}  
-**Job title:** {job_title or "—"}  
-**Work email:** {work_email or "—"}  
-**Photo S3 key:** `{photo_key}`  
-**Created at:** {created_at}
-                """
-            )
-        st.info("Profile saved to `employee_master`. You can now associate detections with this EmployeeID.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        # Refresh directory cache so the new employee appears immediately
-        st.cache_data.clear()
-        # NEW: hard refresh the page so the table re-queries and shows the new row
-        try:
-            st.rerun()
-        except Exception:
-            st.experimental_rerun()
+with right:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.subheader("🧾 Detection Result")
 
-    except Exception as e:
-        st.error(f"Something went wrong while creating the employee: {e}")
+    if result is None:
+        st.caption("The detection summary will appear here after you upload a photo.")
+    else:
+        # --------- Top row: Identity ---------
+        c1, c2, c3 = st.columns([1.2, 1, 1])
+        with c1:
+            st.markdown('<div class="label">Employee Name</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("name","Unknown")}</div>', unsafe_allow_html=True)
+        with c2:
+            st.markdown('<div class="label">Employee ID</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("employee_id","—")}</div>', unsafe_allow_html=True)
+        with c3:
+            st.markdown('<div class="label">Department</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("department","—")}</div>', unsafe_allow_html=True)
+
+        # --------- 2nd row: Location/Time ---------
+        c4, c5, c6 = st.columns([1, 0.8, 1.2])
+        with c4:
+            st.markdown('<div class="label">Site</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("site","—")}</div>', unsafe_allow_html=True)
+        with c5:
+            st.markdown('<div class="label">Shift / Zone</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("shift","—")} / {result.get("zone","—")}</div>', unsafe_allow_html=True)
+        with c6:
+            st.markdown('<div class="label">Timestamp</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("timestamp","—")}</div>', unsafe_allow_html=True)
+
+        st.divider()
+
+        # --------- Metrics row ---------
+        total_violations = len(result.get("violations", []))
+        total_detected   = len(result.get("ppe_detected", []))
+        confidence       = result.get("model_confidence", None)
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Violations", total_violations)
+        m2.metric("PPE Detected", total_detected)
+        if confidence is not None:
+            m3.metric("Model Confidence", f"{confidence}%")
+        else:
+            m3.metric("Model Confidence", "—")
+
+        st.divider()
+
+        # --------- Status & details ---------
+        st.markdown('<div class="label">Status</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="value">{result.get("status","—")}</div>', unsafe_allow_html=True)
+
+        # Violations list
+        violations = result.get("violations", [])
+        if violations:
+            st.markdown('<div class="label" style="margin-top:10px;">Violations</div>', unsafe_allow_html=True)
+            for v in violations:
+                st.markdown(f"- {v}")
+        else:
+            st.markdown("No violations detected ✅")
+
+        # PPE detected (chips)
+        detected = result.get("ppe_detected", [])
+        if detected:
+            st.markdown('<div class="label" style="margin-top:14px;">PPE Detected</div>', unsafe_allow_html=True)
+            chips = "".join([f'<span class="chip">{d}</span>' for d in detected])
+            st.markdown(chips, unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
