@@ -182,7 +182,7 @@ else:
             "Photo": st.column_config.ImageColumn(
                 "Photo",
                 help="Employee photo",
-                width=288,          # enlarged to ~3×
+                width=400,          # 📌 increased from 288 → 400 for visibly bigger images
             ),
             "EmployeeID": st.column_config.TextColumn("EmployeeID"),
             "Name": st.column_config.TextColumn("Name"),
@@ -272,7 +272,7 @@ with st.form("register_employee_form", clear_on_submit=False, border=True):
         st.markdown("**Employee ID photo**")
         photo = st.file_uploader("Upload image", type=["jpg", "jpeg", "png", "webp"])
         if photo is not None:
-            st.image(photo, caption="Preview", width=260)
+            st.image(photo, caption="Preview", width=300)  # 📌 also increased preview size
 
     submit_new_emp = st.form_submit_button("Create employee", type="primary")
 
@@ -309,7 +309,7 @@ if submit_new_emp:
         with s1:
             if photo is not None:
                 photo.seek(0)
-                st.image(photo, width=220)
+                st.image(photo, width=300)  # 📌 bigger confirmation display
         with s2:
             st.markdown(
                 f"""
@@ -327,7 +327,7 @@ if submit_new_emp:
 
         # Refresh directory cache so the new employee appears immediately
         st.cache_data.clear()
-        st.experimental_rerun()   # ✅ auto-refresh the page/table
+        st.experimental_rerun()
 
     except Exception as e:
         st.error(f"Something went wrong while creating the employee: {e}")
