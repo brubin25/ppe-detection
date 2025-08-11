@@ -147,6 +147,14 @@ if search:
         mask = mask | df_dir[col].astype(str).str.lower().str.contains(s, na=False)
     df_dir = df_dir[mask]
 
+# ✅ Sort by Created (descending; newest first)
+if not df_dir.empty and "Created" in df_dir.columns:
+    try:
+        df_dir["Created_dt"] = pd.to_datetime(df_dir["Created"], errors="coerce")
+        df_dir = df_dir.sort_values(by="Created_dt", ascending=False).drop(columns=["Created_dt"])
+    except Exception as e:
+        st.warning(f"Could not sort by creation date: {e}")
+
 # Keep the column order and avoid KeyError even when empty
 if df_dir.empty:
     grid_df = pd.DataFrame(columns=DISPLAY_COLS)
@@ -170,7 +178,7 @@ else:
         use_container_width=True,
         hide_index=True,
         column_config={
-            "#": st.column_config.NumberColumn("#", help="Row number", format="%d", width=70),  # NEW
+            "#": st.column_config.NumberColumn("#", help="Row number", format="%d", width=70),
             "Photo": st.column_config.ImageColumn(
                 "Photo",
                 help="Employee photo",
@@ -319,11 +327,7 @@ if submit_new_emp:
 
         # Refresh directory cache so the new employee appears immediately
         st.cache_data.clear()
-        # NEW: hard refresh the page so the table re-queries and shows the new row
-        try:
-            st.rerun()
-        except Exception:
-            st.experimental_rerun()
+        st.experimental_rerun()   # ✅ auto-refresh the page/table
 
     except Exception as e:
         st.error(f"Something went wrong while creating the employee: {e}")
