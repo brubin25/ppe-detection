@@ -153,16 +153,24 @@ if df_dir.empty:
 else:
     grid_df = df_dir.reindex(columns=DISPLAY_COLS)
 
+# NEW: add the running index column as the first column (1..n)
+if grid_df.empty:
+    grid_df_display = pd.DataFrame(columns=["#"] + DISPLAY_COLS)
+else:
+    grid_df_display = grid_df.copy().reset_index(drop=True)
+    grid_df_display.insert(0, "#", range(1, len(grid_df_display) + 1))
+
 # Enlarged photo thumbnails
 st.subheader("Directory")
-if grid_df.empty:
+if grid_df_display.empty:
     st.info("No employees found yet. Use the form below to register the first employee.")
 else:
     st.dataframe(
-        grid_df,
+        grid_df_display,
         use_container_width=True,
         hide_index=True,
         column_config={
+            "#": st.column_config.NumberColumn("#", help="Row number", format="%d", width=70),  # NEW
             "Photo": st.column_config.ImageColumn(
                 "Photo",
                 help="Employee photo",
@@ -311,5 +319,11 @@ if submit_new_emp:
 
         # Refresh directory cache so the new employee appears immediately
         st.cache_data.clear()
+        # NEW: hard refresh the page so the table re-queries and shows the new row
+        try:
+            st.rerun()
+        except Exception:
+            st.experimental_rerun()
+
     except Exception as e:
         st.error(f"Something went wrong while creating the employee: {e}")
