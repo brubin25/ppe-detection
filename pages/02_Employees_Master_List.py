@@ -104,7 +104,6 @@ def _scan_employee_master() -> pd.DataFrame:
             break
 
     if not items:
-        # Return an empty dataframe with the display columns to avoid KeyError downstream
         return pd.DataFrame(columns=DISPLAY_COLS)
 
     rows = []
@@ -124,7 +123,6 @@ def _scan_employee_master() -> pd.DataFrame:
         )
     df = pd.DataFrame(rows)
 
-    # Ensure all DISPLAY_COLS exist (even if some items lack fields)
     for c in DISPLAY_COLS:
         if c not in df.columns:
             df[c] = ""
@@ -139,7 +137,7 @@ search = st.text_input("Search employees", placeholder="Search by name, Employee
 
 df_dir = _cached_directory()
 
-# Apply search filter (works even when empty)
+# Apply search filter
 if search:
     s = search.strip().lower()
     mask = pd.Series([False] * len(df_dir))
@@ -155,24 +153,38 @@ if not df_dir.empty and "Created" in df_dir.columns:
     except Exception as e:
         st.warning(f"Could not sort by creation date: {e}")
 
-# Keep the column order and avoid KeyError even when empty
+# Keep the column order
 if df_dir.empty:
     grid_df = pd.DataFrame(columns=DISPLAY_COLS)
 else:
     grid_df = df_dir.reindex(columns=DISPLAY_COLS)
 
-# NEW: add the running index column as the first column (1..n)
+# NEW: add row number
 if grid_df.empty:
     grid_df_display = pd.DataFrame(columns=["#"] + DISPLAY_COLS)
 else:
     grid_df_display = grid_df.copy().reset_index(drop=True)
     grid_df_display.insert(0, "#", range(1, len(grid_df_display) + 1))
 
-# Enlarged photo thumbnails
+# Enlarged square thumbnails without increasing column width
 st.subheader("Directory")
 if grid_df_display.empty:
     st.info("No employees found yet. Use the form below to register the first employee.")
 else:
+    # Square-ish effect by setting height equal to column cell
+    st.markdown(
+        """
+        <style>
+        [data-testid="stImage"] img {
+            object-fit: cover;
+            width: 100% !important;
+            height: 100px !important; /* 📌 Adjust height to make bigger squares */
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.dataframe(
         grid_df_display,
         use_container_width=True,
@@ -182,7 +194,7 @@ else:
             "Photo": st.column_config.ImageColumn(
                 "Photo",
                 help="Employee photo",
-                width=400,          # 📌 increased from 288 → 400 for visibly bigger images
+                width=120,   # column width stays same
             ),
             "EmployeeID": st.column_config.TextColumn("EmployeeID"),
             "Name": st.column_config.TextColumn("Name"),
@@ -202,7 +214,6 @@ st.divider()
 # =====================================================================
 
 def _make_employee_id_sequential(df_master: pd.DataFrame) -> str:
-    """Generate sequential IDs emp01, emp02, … based on what exists; works when table is empty."""
     if df_master.empty or "EmployeeID" not in df_master:
         return "emp01"
     nums = []
@@ -233,7 +244,6 @@ def _put_photo_to_s3(employee_id: str, file, filename: str) -> str:
     return key
 
 def _upsert_employee_profile_to_master(employee_id: str, payload: dict):
-    """Write/overwrite the profile to employee_master (separate table)."""
     tbl = _ddb_table(EMPLOYEE_TABLE)
     item = {
         "EmployeeID": employee_id,
@@ -272,7 +282,7 @@ with st.form("register_employee_form", clear_on_submit=False, border=True):
         st.markdown("**Employee ID photo**")
         photo = st.file_uploader("Upload image", type=["jpg", "jpeg", "png", "webp"])
         if photo is not None:
-            st.image(photo, caption="Preview", width=300)  # 📌 also increased preview size
+            st.image(photo, caption="Preview", width=300)
 
     submit_new_emp = st.form_submit_button("Create employee", type="primary")
 
@@ -309,7 +319,7 @@ if submit_new_emp:
         with s1:
             if photo is not None:
                 photo.seek(0)
-                st.image(photo, width=300)  # 📌 bigger confirmation display
+                st.image(photo, width=300)
         with s2:
             st.markdown(
                 f"""
@@ -325,7 +335,6 @@ if submit_new_emp:
             )
         st.info("Profile saved to `employee_master`. You can now associate detections with this EmployeeID.")
 
-        # Refresh directory cache so the new employee appears immediately
         st.cache_data.clear()
         st.experimental_rerun()
 
