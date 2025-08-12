@@ -72,8 +72,27 @@ def img_to_data_uri(p: Path) -> str:
 # --- Global styles (smaller card images & tight spacing) ---
 st.markdown(f"""
 <style>
-.stApp {{ background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%); }}
+/* App background with PPE-themed warm gradient + subtle radial glow */
+.stApp {{
+  background:
+    radial-gradient(
+      circle at 15% 20%,
+      rgba(255, 127, 39, 0.08) 0%,
+      transparent 40%
+    ),
+    linear-gradient(
+      135deg,
+      #fff7ed 0%,   /* light PPE orange */
+      #ffedd5 40%,  /* soft peach */
+      #ffffff 100%  /* fade to white for readability */
+    );
+}}
 footer {{ visibility: hidden; }}
+
+/* Sidebar background to match theme */
+[data-testid="stSidebar"] {{
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+}}
 
 .greet {{ font-size: 16px; color: #0f172a; margin: 4px 0 8px 2px; }}
 
