@@ -98,12 +98,6 @@ with st.container():
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
-    with right:
-        st.caption("Add a photo or logo (optional)")
-        logo = st.file_uploader("Upload image", type=["png", "jpg", "jpeg"], label_visibility="collapsed")
-        if logo:
-            st.image(logo, use_column_width=True, caption="Project Image")
-
 # ---------- Architecture & Flow ----------
 st.markdown('<div class="section-h">Architecture Overview</div>', unsafe_allow_html=True)
 st.markdown(
