@@ -5,7 +5,7 @@ import time
 import uuid
 import mimetypes
 from datetime import datetime
-import random
+from boto3.dynamodb.conditions import Attr
 
 # ✅ Auth guard (kept minimal; doesn’t change your logic)
 from auth import require_login
@@ -25,12 +25,18 @@ AWS_ACCESS_KEY = st.secrets.get("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_I
 AWS_SECRET_KEY = st.secrets.get("AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", ""))
 REGION         = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
 
-BUCKET_NAME    = "ppe-detection-input"
-UPLOAD_PREFIX  = "uploads/"  # all uploads go under uploads/
+BUCKET_NAME          = "ppe-detection-input"
+UPLOAD_PREFIX        = "uploads/"          # all uploads go under uploads/
+EMP_TABLE            = "employee_master"   # master employees
+VIOL_TABLE           = "violation_master"  # aggregated violations
 
 # Normalize to ensure single trailing slash (safety guard; doesn't change behavior)
 if not UPLOAD_PREFIX.endswith("/"):
     UPLOAD_PREFIX = UPLOAD_PREFIX + "/"
+
+# Poll settings (how long we wait for Lambda to write the result)
+POLL_SECONDS  = 25
+POLL_INTERVAL = 2.0
 
 # ------------------------
 # CONSTANTS
@@ -67,17 +73,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ------------------------
-# HEADER
-# ------------------------
-st.title("🦺 Detect PPE (Upload)")
-st.caption("Upload a photo and see the detection result appear on the right.")
-
-# ------------------------
 # HELPERS
 # ------------------------
 def s3_client():
     return boto3.client(
         "s3",
+        aws_access_key_id=AWS_ACCESS_KEY,
+        aws_secret_access_key=AWS_SECRET_KEY,
+        region_name=REGION,
+    )
+
+def ddb_resource():
+    return boto3.resource(
+        "dynamodb",
         aws_access_key_id=AWS_ACCESS_KEY,
         aws_secret_access_key=AWS_SECRET_KEY,
         region_name=REGION,
@@ -92,32 +100,91 @@ def guess_content_type(filename: str) -> str:
     ctype, _ = mimetypes.guess_type(filename)
     return ctype or "application/octet-stream"
 
-def fake_rekognition_response(image_key: str):
+def poll_violation_result(image_key: str):
     """
-    Placeholder shape for what a Rekognition/Lambda result might return.
-    Extend/replace this with your real JSON shape when you hook up to your backend.
+    Poll violation_master for a row where last_image_key == image_key.
+    Returns the violation item (dict) or None if not found in time.
     """
-    base = os.path.splitext(os.path.basename(image_key))[0] or "Unknown"
-    # Randomize a little for demo feel
-    all_items = ["Hard Hat", "Safety Vest", "Safety Glasses", "Gloves", "Ear Protection"]
-    missing = ["No Helmet", "No Safety Vest"]  # example violations
-    present = [i for i in all_items if ("No " + i.replace(" ", "")) not in missing]
-    confidence = round(random.uniform(92.5, 99.5), 1)
+    ddb = ddb_resource()
+    table = ddb.Table(VIOL_TABLE)
+
+    deadline = time.time() + POLL_SECONDS
+    while time.time() < deadline:
+        # SCAN with filter on last_image_key (simple but fine for modest tables)
+        resp = table.scan(
+            FilterExpression=Attr("last_image_key").eq(image_key),
+            ProjectionExpression="#eid, violations, last_missing, last_updated, last_image_key",
+            ExpressionAttributeNames={"#eid": "EmployeeID"},
+        )
+        items = resp.get("Items", [])
+        if items:
+            return items[0]
+        time.sleep(POLL_INTERVAL)
+    return None
+
+def get_employee_profile(employee_id: str):
+    """
+    Get employee profile from employee_master by EmployeeID.
+    """
+    ddb = ddb_resource()
+    table = ddb.Table(EMP_TABLE)
+    resp = table.get_item(Key={"EmployeeID": employee_id})
+    return resp.get("Item", {})
+
+def build_display_result(image_key: str):
+    """
+    Compose a result dict for UI using violation_master + employee_master.
+    If no violation row arrives (e.g., person compliant or detection failed), return a
+    "compliant" placeholder with the key so users know it uploaded fine.
+    """
+    vio = poll_violation_result(image_key)
+
+    if not vio:
+        # Not found—either (1) compliant (Lambda sends a compliance SNS but no increment),
+        # or (2) still processing. We’ll show a neutral card.
+        return {
+            "employee_id": "—",
+            "name": os.path.basename(image_key),
+            "department": "—",
+            "site": "—",
+            "shift": None,
+            "zone": None,
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            "status": "Compliant or Pending",
+            "violations": [],
+            "ppe_detected": [],
+            "model_confidence": None,
+            "image_key": image_key,
+        }
+
+    employee_id = vio.get("EmployeeID", "—")
+    profile = get_employee_profile(employee_id)
+
+    # violations list comes from "last_missing" stored by Lambda (comma-separated)
+    last_missing = vio.get("last_missing") or ""
+    violations = [x.strip() for x in last_missing.split(",") if x.strip()]
 
     return {
-        "employee_id": f"EMP-{random.randint(10000, 99999)}",
-        "name": base.replace("_", " ").title(),
-        "department": "Manufacturing",
-        "site": "Plant 3",
-        "shift": "Night",
-        "zone": "Line A",
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "status": "Non-Compliant" if missing else "Compliant",
-        "violations": missing,
-        "ppe_detected": ["Safety Glasses", "Gloves"],  # example present PPE
-        "model_confidence": confidence,                # top-level overall score
-        "image_key": image_key,                        # show the real S3 object key
+        "employee_id": employee_id,
+        "name": profile.get("name") or employee_id,
+        "department": profile.get("department") or "—",
+        "site": profile.get("site") or "—",
+        "shift": None,            # not stored; leave None/— in UI
+        "zone": None,             # not stored; leave None/— in UI
+        "timestamp": vio.get("last_updated") or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "Non-Compliant" if violations else "Compliant",
+        "violations": violations,
+        "ppe_detected": [],       # if you store "last_detected" in Lambda, read it here
+        "model_confidence": None, # not stored; can be added to Lambda if needed
+        "image_key": image_key,
+        "violation_count": int(vio.get("violations", 0)),
     }
+
+# ------------------------
+# HEADER
+# ------------------------
+st.title("🦺 Detect PPE (Upload)")
+st.caption("Upload a photo and see the detection result appear on the right (powered by Lambda + DynamoDB).")
 
 # ------------------------
 # LAYOUT: LEFT (upload + preview) | RIGHT (result)
@@ -162,9 +229,12 @@ with left:
                             Body=file_bytes,
                             ContentType=guess_content_type(original_name),
                         )
-                    st.success("✅ Uploaded successfully. PPE analysis will start shortly.")
-                    # Simulate/attach a detection response (pass key so it shows where it landed)
-                    result = fake_rekognition_response(key)
+                    st.success("✅ Uploaded successfully. Waiting for detection result…")
+
+                    # Poll DynamoDB for the record written by Lambda
+                    with st.spinner("Analyzing (Lambda) …"):
+                        result = build_display_result(key)
+
                 except Exception as e:
                     st.error(f"❌ Upload failed: {e}")
 
@@ -181,7 +251,7 @@ with right:
         c1, c2, c3 = st.columns([1.2, 1, 1])
         with c1:
             st.markdown('<div class="label">Employee Name</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="value">{result.get("name","Unknown")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("name","—")}</div>', unsafe_allow_html=True)
         with c2:
             st.markdown('<div class="label">Employee ID</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="value">{result.get("employee_id","—")}</div>', unsafe_allow_html=True)
@@ -196,7 +266,7 @@ with right:
             st.markdown(f'<div class="value">{result.get("site","—")}</div>', unsafe_allow_html=True)
         with c5:
             st.markdown('<div class="label">Shift / Zone</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="value">{result.get("shift","—")} / {result.get("zone","—")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result.get("shift","—") or "—"} / {result.get("zone","—") or "—"}</div>', unsafe_allow_html=True)
         with c6:
             st.markdown('<div class="label">Timestamp</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="value">{result.get("timestamp","—")}</div>', unsafe_allow_html=True)
@@ -209,7 +279,8 @@ with right:
         confidence       = result.get("model_confidence", None)
 
         m1, m2, m3 = st.columns(3)
-        m1.metric("Total Violations", total_violations)
+        # If Lambda writes cumulative count, show it; else show this image's count (=len list)
+        m1.metric("Total Violations (this image)", total_violations)
         m2.metric("PPE Detected", total_detected)
         if confidence is not None:
             m3.metric("Model Confidence", f"{confidence}%")
@@ -237,5 +308,10 @@ with right:
             st.markdown('<div class="label" style="margin-top:14px;">PPE Detected</div>', unsafe_allow_html=True)
             chips = "".join([f'<span class="chip">{d}</span>' for d in detected])
             st.markdown(chips, unsafe_allow_html=True)
+
+        # Show cumulative count if present
+        if "violation_count" in result:
+            st.markdown('<div class="label" style="margin-top:14px;">Cumulative Violations</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="value">{result["violation_count"]}</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
