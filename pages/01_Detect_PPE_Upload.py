@@ -161,10 +161,10 @@ def build_display_result(image_key: str):
         # Not found — likely compliant or still processing
         return {
             "employee_id": "—",
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "name": os.path.basename(image_key),
             "department": "—",
             "site": "—",
-            "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": "Compliant or Pending",
             "violations": [],
             "ppe_detected": det_json.get("ppe_detected", []) if det_json else [],
