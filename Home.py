@@ -303,15 +303,3 @@ with st.container():
             st.image(str(CARD_IMG3), use_container_width=True)
 
 st.write("")
-
-# --- Quick links (unchanged) ---
-st.markdown("#### Quick links")
-ql1, ql2, ql3, ql4 = st.columns(4)
-with ql1:
-    st.page_link("pages/01_Detect_PPE_Upload.py", label="Detect PPE (Upload)", icon="⬆️")
-with ql2:
-    st.page_link("pages/02_Employees_Master_List.py", label="Employees (Master List)", icon="👥")
-with ql3:
-    st.page_link("pages/03_Violations.py", label="Employees Violations", icon="⚠️")
-with ql4:
-    st.page_link("pages/04_About.py", label="About", icon="ℹ️")
