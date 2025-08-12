@@ -35,9 +35,6 @@ st.markdown("""
 <div class="navbar">
   <div class="nav-left">
     <span style="font-weight:800; font-size:16px;">🦺 PPE Safety Suite</span>
-    <a class="nav-link" href="/">Homepage</a>
-    <a class="nav-link" href="/About">About</a>
-    <a class="nav-link" href="/Technology">Technology</a>
   </div>
   <div class="nav-right">
     <a class="nav-cta" href="#">Contact us</a>
