@@ -19,22 +19,28 @@ st.set_page_config(
 )
 
 # -----------------------
-# Global PPE styling (soft orange theme)
+# Global PPE styling (stronger orange theme)
 # -----------------------
 st.markdown("""
 <style>
-  /* Soft PPE orange gradient background */
-  .stApp {
-    background: linear-gradient(180deg, #fff7ed 0%, #fff 28%);
+  /* Full-page PPE orange gradient */
+  html, body, .stApp {
+    height: 100%;
+    background: linear-gradient(160deg, #fff3e6 0%, #fff7ed 28%, #ffffff 70%);
+    background-attachment: fixed;
   }
-  footer { visibility: hidden; }
 
-  /* Headings & subheaders subtle tweak */
-  h1, h2, h3, h4 { color: #0f172a; }
+  /* Make main content surface slightly lifted from background */
+  .block-container {
+    padding-top: 1.2rem;
+    padding-bottom: 3rem;
+    border-radius: 12px;
+  }
 
-  /* KPI metric labels -> safety orange */
-  div[data-testid="stMetric"] div[data-testid="stMetricLabel"] {
-      color: #ea580c !important; /* orange-600 */
+  /* Sidebar: light orange panel */
+  section[data-testid="stSidebar"] > div {
+    background: linear-gradient(180deg, #fff3e6 0%, #fff7ed 40%, #ffffff 100%);
+    border-right: 1px solid #fed7aa;
   }
 
   /* Sidebar controls: borders & focus rings in orange */
@@ -49,23 +55,34 @@ st.markdown("""
   section[data-testid="stSidebar"] .stSelectbox > div > div {
     border: 1px solid #fed7aa !important;   /* orange-200 */
     box-shadow: 0 0 0 0px #fff inset !important;
+    background: #fffdfa;
   }
   section[data-testid="stSidebar"] .stTextInput input:focus,
   section[data-testid="stSidebar"] .stMultiSelect:focus-within > div > div,
   section[data-testid="stSidebar"] .stSelectbox:focus-within > div > div {
     border: 1px solid #fb923c !important;   /* orange-400 */
     box-shadow: 0 0 0 3px #fed7aa55 !important;
+    background: #ffffff;
   }
 
-  /* Tables: header bar with orange hint */
+  /* KPI metric labels -> safety orange */
+  div[data-testid="stMetric"] div[data-testid="stMetricLabel"] {
+      color: #ea580c !important; /* orange-600 */
+  }
+
+  /* Subheaders */
+  h2, h3 { color: #0f172a; }
+
+  /* Dataframe header hint */
   .orange-table thead tr th {
     background: #fff7ed !important;        /* orange-50 */
     border-bottom: 1px solid #fed7aa !important;
   }
 
-  /* Section dividers a bit softer */
+  /* Softer default HR */
   hr { border: none; border-top: 1px solid #e2e8f0; }
 
+  footer { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -163,9 +180,9 @@ def load_data():
         it["EmployeeID"] = str(it.get("EmployeeID", ""))
         it["name"]       = it.get("name")
         it["department"] = it.get("department")
-        it["site"]       = it.get("site")
-        it["line"]       = it.get("line")
-        it["job_title"]  = it.get("job_title")
+        it["site"]       = it.get("site")           # often "Plant X". If you store "line", we’ll surface it below if present.
+        it["line"]       = it.get("line")           # optional, if present in your table
+        it["job_title"]  = it.get("job_title")      # position
         it["status"]     = it.get("status", "Active")
         it["created_at"] = it.get("created_at")
     emp_df = pd.DataFrame(emp_items)
@@ -184,6 +201,7 @@ def load_data():
     if not emp_df.empty and not vio_df.empty:
         df = emp_df.merge(vio_df, on="EmployeeID", how="left")
     else:
+        # If no violations, create empty columns to avoid KeyErrors
         df = emp_df.copy()
         if not df.empty and "violations" not in df.columns:
             df["violations"] = 0
@@ -334,7 +352,7 @@ if not view.empty and "last_updated_dt" in view.columns:
             .groupby("date", as_index=False)["violations"]
             .sum()
         )
-        c4 = alt.Chart(time_series).mark_area(opacity=0.85).encode(
+        c4 = alt.Chart(time_series).mark_area(opacity=0.9).encode(
             x=alt.X("date:T", title="Date"),
             y=alt.Y("violations:Q", title="Violations (sum)"),
             tooltip=[alt.Tooltip("date:T", title="Date"), alt.Tooltip("violations:Q", title="Violations")]
