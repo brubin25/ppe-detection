@@ -4,7 +4,7 @@ import os
 
 st.set_page_config(page_title="About", page_icon="ℹ️", layout="centered")
 
-# ---------- Minimal styling for a cleaner, professional look ----------
+# ---------- Styling ----------
 st.markdown(
     """
     <style>
@@ -44,67 +44,57 @@ st.markdown(
         font-weight: 700; font-size: 18px;
         margin: 16px 0 8px 0; color: #0f172a;
       }
-      ul.about-list { margin-top: 6px; }
-      ul.about-list li { margin-bottom: 6px; }
       .muted { color:#64748b; font-size: 13px; }
-      .img-note { color:#64748b; font-size: 12px; text-align: center; }
+      .img-note { color:#64748b; font-size: 12px; text-align: center; margin-top: -6px; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ---------- Hero ----------
-with st.container():
-    left, right = st.columns([5, 3], gap="large")
+# ---------- Hero Section ----------
+st.markdown('<div class="kicker">About this project</div>', unsafe_allow_html=True)
+st.markdown('<div class="headline">AI-assisted PPE Compliance, built on AWS</div>', unsafe_allow_html=True)
 
-    # LEFT: text content
-    with left:
-        st.markdown('<div class="about-card">', unsafe_allow_html=True)
-        st.markdown('<div class="kicker">About this project</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="headline">AI-assisted PPE Compliance, built on AWS</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            '<div class="sub">This application detects Personal Protective Equipment '
-            '(PPE) in uploaded images, identifies workers via face matching, '
-            'and tracks violations in real time—using a fully serverless, cloud-native architecture.</div>',
-            unsafe_allow_html=True,
-        )
+# Full-width image right under the title
+img_path = "images/ppe-detection-main.png"
+if os.path.exists(img_path):
+    st.image(img_path, use_container_width=True)
+    st.markdown('<div class="img-note">System overview</div>', unsafe_allow_html=True)
+else:
+    st.info("Image not found at `images/ppe-detection-main.png`. Please add the file to show the architecture diagram.")
 
-        st.markdown("**Key capabilities**")
-        st.markdown(
-            """
-            - Real-time PPE detection and person identification  
-            - Automatic alerts via SNS for violations (including critical thresholds)  
-            - Persistent violation tracking in DynamoDB with audit details  
-            - Streamlit front-end for uploads, reporting, and manual edits
-            """
-        )
+# Project description card
+st.markdown('<div class="about-card">', unsafe_allow_html=True)
+st.markdown(
+    '<div class="sub">This application detects Personal Protective Equipment '
+    '(PPE) in uploaded images, identifies workers via face matching, '
+    'and tracks violations in real time—using a fully serverless, cloud-native architecture.</div>',
+    unsafe_allow_html=True,
+)
 
-        st.markdown("**Tech stack**")
-        st.markdown(
-            """
-            <span class="pill">Streamlit (frontend)</span>
-            <span class="pill">Amazon S3 (images & events)</span>
-            <span class="pill">AWS Lambda (serverless)</span>
-            <span class="pill">Amazon Rekognition (PPE + face)</span>
-            <span class="pill">Amazon DynamoDB (violations & employees)</span>
-            <span class="pill">Amazon SNS (email alerts)</span>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("**Key capabilities**")
+st.markdown(
+    """
+    - Real-time PPE detection and person identification  
+    - Automatic alerts via SNS for violations (including critical thresholds)  
+    - Persistent violation tracking in DynamoDB with audit details  
+    - Streamlit front-end for uploads, reporting, and manual edits
+    """
+)
 
-    # RIGHT: architecture/hero image
-    with right:
-        img_path = "images/ppe-detection-main.png"
-        if os.path.exists(img_path):
-            st.image(img_path, use_column_width=True)
-            st.markdown('<div class="img-note">System overview</div>', unsafe_allow_html=True)
-        else:
-            st.info("Image not found at `images/ppe-detection-main.png`. "
-                    "Add the file to display the architecture illustration.")
+st.markdown("**Tech stack**")
+st.markdown(
+    """
+    <span class="pill">Streamlit (frontend)</span>
+    <span class="pill">Amazon S3 (images & events)</span>
+    <span class="pill">AWS Lambda (serverless)</span>
+    <span class="pill">Amazon Rekognition (PPE + face)</span>
+    <span class="pill">Amazon DynamoDB (violations & employees)</span>
+    <span class="pill">Amazon SNS (email alerts)</span>
+    """,
+    unsafe_allow_html=True,
+)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------- Architecture & Flow ----------
 st.markdown('<div class="section-h">Architecture Overview</div>', unsafe_allow_html=True)
