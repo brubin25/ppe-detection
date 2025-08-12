@@ -260,9 +260,7 @@ def _upsert_employee_profile_to_master(employee_id: str, payload: dict):
 
 st.subheader("Register new employee (with ID photo)")
 st.caption(
-    "Create a new employee profile with professional details and upload an ID photo. "
-    "The photo is stored in S3 at **ppe-detection-input/employees/** and the profile is saved to "
-    "**DynamoDB table `employee_master`**."
+    "Create a new employee profile with ID photo. "
 )
 
 with st.form("register_employee_form", clear_on_submit=False, border=True):
