@@ -1,5 +1,6 @@
 import streamlit as st
 from datetime import datetime
+import os
 
 st.set_page_config(page_title="About", page_icon="ℹ️", layout="centered")
 
@@ -34,24 +35,19 @@ st.markdown(
         margin-bottom: 14px;
       }
       .pill {
-        display:inline-block;
-        padding: 6px 10px;
-        border-radius: 999px;
-        border: 1px solid #e5e7eb;
-        background: #f8fafc;
-        font-size: 12px;
-        color: #0f172a;
+        display:inline-block; padding: 6px 10px;
+        border-radius: 999px; border: 1px solid #e5e7eb;
+        background: #f8fafc; font-size: 12px; color: #0f172a;
         margin: 4px 6px 0 0;
       }
       .section-h {
-        font-weight: 700;
-        font-size: 18px;
-        margin: 16px 0 8px 0;
-        color: #0f172a;
+        font-weight: 700; font-size: 18px;
+        margin: 16px 0 8px 0; color: #0f172a;
       }
       ul.about-list { margin-top: 6px; }
       ul.about-list li { margin-bottom: 6px; }
       .muted { color:#64748b; font-size: 13px; }
+      .img-note { color:#64748b; font-size: 12px; text-align: center; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -60,6 +56,8 @@ st.markdown(
 # ---------- Hero ----------
 with st.container():
     left, right = st.columns([5, 3], gap="large")
+
+    # LEFT: text content
     with left:
         st.markdown('<div class="about-card">', unsafe_allow_html=True)
         st.markdown('<div class="kicker">About this project</div>', unsafe_allow_html=True)
@@ -97,6 +95,16 @@ with st.container():
             unsafe_allow_html=True,
         )
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # RIGHT: architecture/hero image
+    with right:
+        img_path = "images/ppe-detection-main.png"
+        if os.path.exists(img_path):
+            st.image(img_path, use_column_width=True)
+            st.markdown('<div class="img-note">System overview</div>', unsafe_allow_html=True)
+        else:
+            st.info("Image not found at `images/ppe-detection-main.png`. "
+                    "Add the file to display the architecture illustration.")
 
 # ---------- Architecture & Flow ----------
 st.markdown('<div class="section-h">Architecture Overview</div>', unsafe_allow_html=True)
