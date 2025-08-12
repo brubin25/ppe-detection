@@ -1,4 +1,3 @@
-
 import streamlit as st
 from datetime import datetime
 import os
@@ -9,6 +8,26 @@ st.set_page_config(page_title="About", page_icon="ℹ️", layout="centered")
 st.markdown(
     """
     <style>
+      /* PPE-themed warm background + subtle radial glow */
+      .stApp {
+        background:
+          radial-gradient(
+            circle at 15% 20%,
+            rgba(255, 127, 39, 0.08) 0%,
+            transparent 40%
+          ),
+          linear-gradient(
+            135deg,
+            #fff7ed 0%,   /* light PPE orange */
+            #ffedd5 40%,  /* soft peach */
+            #ffffff 100%  /* fade to white for readability */
+          );
+      }
+      /* Sidebar aligned with theme */
+      [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+      }
+
       .about-card {
         background: #ffffff;
         padding: 24px 28px;
@@ -62,7 +81,7 @@ if os.path.exists(img_path):
     st.image(img_path, use_container_width=True)
     st.markdown('<div class="img-note">System overview</div>', unsafe_allow_html=True)
 else:
-    st.info("Image not found at `images/ppe-detection-main.png`. Please add the file to show the architecture diagram.")
+    st.info("Image not found at images/ppe-detection-main.png. Please add the file to show the architecture diagram.")
 
 # Project description card
 st.markdown('<div class="about-card">', unsafe_allow_html=True)
@@ -101,7 +120,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 st.markdown('<div class="section-h">Architecture Overview</div>', unsafe_allow_html=True)
 st.markdown(
     """
-    - **Streamlit** UI uploads an image to **S3** (under `uploads/`)  
+    - **Streamlit** UI uploads an image to **S3** (under uploads/)  
     - **S3 event** triggers **AWS Lambda**  
     - Lambda calls **Amazon Rekognition** for PPE detection and face matching  
     - Lambda verifies the worker in **employee_master**, updates **violation_master**, and sends **SNS** alerts  
@@ -112,9 +131,9 @@ st.markdown(
 st.markdown('<div class="section-h">Data Flow</div>', unsafe_allow_html=True)
 st.markdown(
     """
-    1. **Upload** → Image lands in `s3://…/uploads/`  
+    1. **Upload** → Image lands in s3://…/uploads/  
     2. **Detect** → Lambda runs PPE + face match (Rekognition)  
-    3. **Track** → Write/Increment to `violation_master` with last_missing, last_updated, and image key  
+    3. **Track** → Write/Increment to violation_master with last_missing, last_updated, and image key  
     4. **Alert** → SNS sends email alerts for violations (and critical thresholds)  
     5. **Review** → Streamlit displays results and allows authorized edits
     """
@@ -128,7 +147,7 @@ with st.expander("🔐 Security & Governance"):
         - **Private S3 objects** with presigned access when needed  
         - **Serverless** services (Lambda, DynamoDB) reduce patching overhead  
         - **PII awareness**: face images and identifiers remain in your AWS account  
-        - **Auditability**: `violation_master` includes timestamps and last image keys
+        - **Auditability**: violation_master includes timestamps and last image keys
         """
     )
 
