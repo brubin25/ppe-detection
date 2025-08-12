@@ -153,9 +153,6 @@ nav_html = """
 <div class="navbar">
   <div class="nav-left">
     <span style="font-weight:800;">🦺 PPE Safety Suite</span>
-    <a class="nav-link" href="#">Homepage</a>
-    <a class="nav-link" href="#">About</a>
-    <a class="nav-link" href="#">Technology</a>
   </div>
   <div class="nav-right">
 """
