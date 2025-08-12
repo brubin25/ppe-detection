@@ -42,20 +42,41 @@ POLL_INTERVAL = 2.0
 # ------------------------
 PREVIEW_WIDTH_PX = 380
 
+# 🔶 Theming only: PPE orange gradient + sidebar + primary button styling
 st.markdown("""
 <style>
-  .stApp { background: linear-gradient(135deg, #f5f9ff, #ffffff); }
+  /* App background: subtle PPE orange glow + warm light gradient */
+  .stApp {
+    background:
+      radial-gradient(1000px 600px at 10% 10%, rgba(255, 127, 39, 0.10) 0%, transparent 40%),
+      linear-gradient(135deg, #fff7ed 0%, #ffedd5 40%, #ffffff 100%);
+  }
+  /* Sidebar theme */
+  [data-testid="stSidebar"]{
+    background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+    border-right: 1px solid #f1f5f9;
+  }
+
   .upload-box, .panel {
     background: white; padding: 20px; border-radius: 15px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.05);
   }
-  .stButton button {
-    background-color: #2563eb; color: white; font-weight: 600;
-    border-radius: 8px; padding: 0.6rem 1.2rem;
+
+  /* Primary button → orange */
+  .stButton button[kind="primary"] {
+    background-color: #f97316;            /* orange-500 */
+    border: 1px solid #fb923c;            /* orange-400 */
+    color: white; font-weight: 600;
+    border-radius: 10px; padding: 0.6rem 1.2rem;
   }
-  .stButton button:hover { background-color: #1e4ed8; }
+  .stButton button[kind="primary"]:hover {
+    background-color: #ea580c;            /* orange-600 */
+    border-color: #f97316;
+  }
+
   .label { color:#64748b; font-size:13px; text-transform:uppercase; letter-spacing:.04em; }
   .value { font-weight:700; color:#0f172a; font-size:16px; }
+
   /* Bigger badge for cumulative violations */
   .big-badge {
     display:inline-block; font-weight:800; font-size:32px; color:#111827;
@@ -185,7 +206,6 @@ def build_display_result(image_key: str):
     detected = []
     confidence = None
     if det_json:
-        # Expect fields like {"ppe_detected": ["Safety Glasses", ...], "model_confidence": 95.2}
         if isinstance(det_json.get("ppe_detected"), list):
             detected = [str(x) for x in det_json["ppe_detected"]]
         confidence = det_json.get("model_confidence")
@@ -294,6 +314,7 @@ with right:
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Total Violations (this image)", total_violations_this_image)
+        # Uncomment if you want these visible again:
         # m2.metric("PPE Detected", total_detected)
         # m3.metric("Model Confidence", f"{confidence}%" if confidence is not None else "—")
 
