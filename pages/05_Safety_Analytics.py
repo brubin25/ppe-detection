@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("📊 Safety Analytics")
+st.title("Safety Analytics")
 st.caption("Operational insights across employees and PPE violations (DynamoDB: employee_master & violation_master).")
 
 # -----------------------
