@@ -44,7 +44,7 @@ if _missing:
     st.stop()
 
 st.set_page_config(page_title="Employees (Master List)", page_icon="👥", layout="wide")
-st.title("👥👥 Employees (Master List)")
+st.title("Employees (Master List)")
 st.caption("Directory of employees (DynamoDB: employee_master) with profile photos. Register new employees below.")
 
 # --- AWS config (reads secrets w/ env fallbacks) ---
@@ -258,7 +258,7 @@ def _upsert_employee_profile_to_master(employee_id: str, payload: dict):
     }
     tbl.put_item(Item=item)
 
-st.subheader("Register new employee (with ID photo)")
+st.subheader("Register New Employee")
 st.caption(
     "Create a new employee profile with ID photo. "
 )
