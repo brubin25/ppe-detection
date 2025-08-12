@@ -73,7 +73,6 @@ with colL:
     st.markdown("""
     <div class="profile-box">
       <div style="font-weight:800; font-size:18px; margin-bottom:6px;">Your Account</div>
-      <div class="kv"><div>Name</div><div>{name}</div></div>
       <div class="kv"><div>Email</div><div>{email}</div></div>
       <div class="kv"><div>User ID (sub)</div><div style="font-family:monospace;">{sub}</div></div>
       <div class="kv"><div>Session</div><div>Active</div></div>
