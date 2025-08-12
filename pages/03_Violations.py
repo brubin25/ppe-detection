@@ -9,15 +9,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # --- AWS / general imports
 import importlib
 import boto3
-import mimetypes
-import time
-import uuid
-import re
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from decimal import Decimal
 from botocore.exceptions import ClientError
 
-# ---------- Robust import of utils.data (keep; we won't rely on it for the main table) ----------
+# ---------- Robust import of utils.data (kept for compatibility) ----------
 _missing = []
 try:
     data_mod = importlib.import_module("utils.data")
@@ -30,14 +26,13 @@ except Exception as e:
     st.stop()
 
 def _require(name, *aliases):
-    """Return the first attribute that exists on data_mod; remember if missing."""
     for n in (name, *aliases):
         if hasattr(data_mod, n):
             return getattr(data_mod, n)
     _missing.append(name if not aliases else f"{name} (aliases tried: {', '.join(aliases)})")
     return None
 
-# Keep these around so nothing else breaks if you reference them elsewhere
+# Kept so nothing else breaks if referenced elsewhere
 load_employees_from_dynamodb = _require("load_employees_from_dynamodb", "load_employees", "get_employees")
 update_employee_violations   = _require("update_employee_violations", "update_employee", "set_employee_violations")
 upsert_employee              = _require("upsert_employee", "put_employee", "create_or_update_employee")
@@ -51,9 +46,6 @@ st.caption("View and edit aggregated PPE violations (DynamoDB: violation_master)
 AWS_ACCESS_KEY = st.secrets.get("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID", ""))
 AWS_SECRET_KEY = st.secrets.get("AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", ""))
 REGION         = st.secrets.get("REGION", os.getenv("AWS_REGION", "us-east-2"))
-
-S3_BUCKET       = "ppe-detection-input"
-UPLOAD_PREFIX   = "uploads/"
 
 EMPLOYEE_TABLE  = "employee_master"
 VIOLATION_TABLE = "violation_master"
@@ -77,7 +69,6 @@ def _to_native(v):
 
 # ---------- Data loaders: scan violation_master and join employee_master ----------
 def _scan_table_all(tbl_name: str) -> list[dict]:
-    """Return all items from a DynamoDB table via paginated Scan."""
     tbl = ddb_table(tbl_name)
     items, start_key = [], None
     while True:
@@ -99,32 +90,27 @@ def _load_violation_df() -> pd.DataFrame:
             "name","department","site"
         ])
 
-    # Normalize types
     for it in vio_items:
-        it["EmployeeID"]   = str(it.get("EmployeeID",""))
-        it["violations"]   = int(_to_native(it.get("violations", 0)))
-        it["last_missing"] = it.get("last_missing","")
+        it["EmployeeID"]     = str(it.get("EmployeeID",""))
+        it["violations"]     = int(_to_native(it.get("violations", 0)))
+        it["last_missing"]   = it.get("last_missing","")
         it["last_image_key"] = it.get("last_image_key","")
-        it["last_updated"] = str(it.get("last_updated",""))
+        it["last_updated"]   = str(it.get("last_updated",""))
 
     vio_df = pd.DataFrame(vio_items)
 
-    # Bring employee metadata for nicer display
     emp_items = _scan_table_all(EMPLOYEE_TABLE)
     for it in emp_items:
         it["EmployeeID"] = str(it.get("EmployeeID",""))
-        # keep a slim view
         it["name"]       = it.get("name")
         it["department"] = it.get("department")
         it["site"]       = it.get("site")
     emp_df = pd.DataFrame(emp_items)[["EmployeeID","name","department","site"]] if emp_items else pd.DataFrame(columns=["EmployeeID","name","department","site"])
 
-    # Left-join: we want to see ALL violation rows, even if employee profile is missing
     merged = vio_df.merge(emp_df, on="EmployeeID", how="left")
     return merged
 
 def _update_violation_count(emp_id: str, new_count: int):
-    """Directly set the violations count for an employee in violation_master."""
     tbl = ddb_table(VIOLATION_TABLE)
     tbl.update_item(
         Key={"EmployeeID": emp_id},
@@ -153,7 +139,7 @@ with bar:
 
 if refresh:
     st.cache_data.clear()
-    st.experimental_rerun()
+    st.rerun()
 
 df = _cached_violations_df()
 
@@ -224,14 +210,11 @@ save_col, _ = st.columns([1, 5])
 with save_col:
     if st.button("💾 Save changes", type="primary"):
         diffs = []
-        # Align by row index from the original view_for_edit
         for i in range(len(edited)):
             old_row = view_for_edit.iloc[i]
             new_row = edited.iloc[i]
-            old_v = int(old_row["violations"])
-            new_v = int(new_row["violations"])
-            if old_v != new_v:
-                diffs.append((new_row["EmployeeID"], new_v))
+            if int(old_row["violations"]) != int(new_row["violations"]):
+                diffs.append((new_row["EmployeeID"], int(new_row["violations"])))
 
         if not diffs:
             st.info("No changes detected.")
@@ -241,10 +224,16 @@ with save_col:
                 try:
                     _update_violation_count(emp_id, new_val)
                     updated += 1
+                except ClientError as e:
+                    # Most likely IAM AccessDenied — show a clear message
+                    st.error(
+                        f"Failed to update {emp_id}: {e.response.get('Error',{}).get('Message','Access denied')}. "
+                        "Grant dynamodb:UpdateItem on table/violation_master to the app's IAM identity."
+                    )
                 except Exception as e:
                     st.error(f"Failed to update {emp_id}: {e}")
-            st.success(f"Updated {updated} record(s).")
-            st.cache_data.clear()
-            st.experimental_rerun()
 
-# ===== Removed: manual Add/Upsert block per your request =====
+            if updated > 0:
+                st.success(f"Updated {updated} record(s).")
+                st.cache_data.clear()
+                st.rerun()
