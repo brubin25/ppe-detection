@@ -42,11 +42,77 @@ st.set_page_config(page_title="Violations", page_icon="⚠️", layout="wide")
 st.title("⚠ Violations")
 st.caption("View and edit aggregated PPE violations (DynamoDB: violation_master). Uploads to S3 (uploads/) will update this table via Lambda.")
 
-# Make metric labels red (scoped to this page)
+# ---------- PPE Theming (orange) + KPI label red ----------
 st.markdown("""
 <style>
+  /* Page background with a soft safety-orange glow */
+  .stApp {
+    background:
+      radial-gradient(900px 540px at 10% 10%, rgba(249,115,22,0.10) 0%, transparent 40%),
+      linear-gradient(135deg, #fff7ed 0%, #ffedd5 40%, #ffffff 100%);
+  }
+
+  /* Metric labels in red (as requested earlier) */
   div[data-testid="stMetric"] div[data-testid="stMetricLabel"] {
     color: #dc2626 !important; /* red-600 */
+  }
+
+  /* Primary buttons in PPE orange */
+  .stButton button[kind="primary"]{
+    background-color:#f97316; border:1px solid #fb923c; color:white; font-weight:600;
+    border-radius:10px; padding:0.5rem 1rem;
+  }
+  .stButton button[kind="primary"]:hover{ background-color:#ea580c; border-color:#f97316; }
+
+  /* Inputs: give text/number search fields an orange focus ring */
+  /* Text input */
+  div[data-baseweb="input"] input {
+    border-radius:10px !important;
+  }
+  div[data-baseweb="input"] > div {
+    border:1px solid #ffd7b0 !important;  /* default border */
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+    border-radius:10px !important;
+  }
+  div[data-baseweb="input"]:has(input:focus) > div {
+    border-color:#f97316 !important;
+    box-shadow: 0 0 0 3px rgba(249,115,22,0.25) !important;
+  }
+
+  /* Number input (same styling) */
+  div[data-baseweb="input"] input[type="number"]{
+    border-radius:10px !important;
+  }
+
+  /* Toggle accent */
+  label[data-baseweb="checkbox"] div[role="checkbox"][aria-checked="true"]{
+    background:#f97316 !important; border-color:#f97316 !important;
+  }
+
+  /* Data tables (high-risk + editor): header band + hover */
+  /* General table header style */
+  .stDataFrame thead tr th,
+  [data-testid="stTable"] thead tr th,
+  [data-testid="stDataEditor"] [role="table"] thead th {
+    background: #fff1e6 !important;
+    color: #0f172a !important;
+    border-bottom: 1px solid #ffd7b0 !important;
+  }
+
+  /* Row hover */
+  .stDataFrame tbody tr:hover td,
+  [data-testid="stTable"] tbody tr:hover td,
+  [data-testid="stDataEditor"] [role="row"]:hover [role="gridcell"] {
+    background: #fff7ed !important;
+  }
+
+  /* Pills for High-Risk section title */
+  .subdue { color:#64748b; }
+
+  /* Panel dividers for visual rhythm */
+  .section-card {
+    background:white; border:1px solid #f1f5f9; border-radius:14px; padding:14px 16px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.04);
   }
 </style>
 """, unsafe_allow_html=True)
@@ -144,7 +210,7 @@ with bar:
     query = c1.text_input("Search by EmployeeID or Name", placeholder="e.g., emp01 or Alvin")
     min_v = c2.number_input("Min violations", min_value=0, value=0, step=1)
     sort_desc = c3.toggle("Sort by violations (desc)", value=True)
-    # 🔴 Refresh button removed as requested
+    # (Refresh button intentionally removed)
 
 df = _cached_violations_df()
 
@@ -178,11 +244,13 @@ high_risk = view[view["violations"] >= 3].copy()
 if high_risk.empty:
     st.info("No employees currently exceed the high-risk threshold.")
 else:
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.dataframe(
         high_risk[["EmployeeID","name","department","site","violations","last_updated","last_missing"]],
         use_container_width=True,
         hide_index=True,
     )
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
