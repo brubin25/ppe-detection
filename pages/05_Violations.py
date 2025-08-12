@@ -52,7 +52,13 @@ st.markdown("""
       linear-gradient(135deg, #fff7ed 0%, #ffedd5 40%, #ffffff 100%);
   }
 
-  /* Metric labels in red (as requested earlier) */
+  /* Sidebar (if used) */
+  section[data-testid="stSidebar"] > div {
+    background: linear-gradient(180deg, #fff3e6 0%, #fff7ed 40%, #ffffff 100%);
+    border-right: 1px solid #fed7aa;
+  }
+
+  /* Metric labels in red (as requested) */
   div[data-testid="stMetric"] div[data-testid="stMetricLabel"] {
     color: #dc2626 !important; /* red-600 */
   }
@@ -64,24 +70,24 @@ st.markdown("""
   }
   .stButton button[kind="primary"]:hover{ background-color:#ea580c; border-color:#f97316; }
 
-  /* Inputs: give text/number search fields an orange focus ring */
-  /* Text input */
-  div[data-baseweb="input"] input {
-    border-radius:10px !important;
-  }
+  /* Inputs (search/number/toggle): orange focus ring & subtle borders */
+  /* Text/number input wrapper */
   div[data-baseweb="input"] > div {
-    border:1px solid #ffd7b0 !important;  /* default border */
+    border:1px solid #ffd7b0 !important;  /* orange-200 */
     box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
     border-radius:10px !important;
+    background:#fffdfa;
   }
-  div[data-baseweb="input"]:has(input:focus) > div {
-    border-color:#f97316 !important;
-    box-shadow: 0 0 0 3px rgba(249,115,22,0.25) !important;
-  }
-
-  /* Number input (same styling) */
-  div[data-baseweb="input"] input[type="number"]{
+  /* Actual input element */
+  div[data-baseweb="input"] input {
     border-radius:10px !important;
+    background:transparent !important;
+  }
+  /* Focus state */
+  div[data-baseweb="input"]:has(input:focus) > div {
+    border-color:#f97316 !important;       /* orange-500 */
+    box-shadow: 0 0 0 3px rgba(249,115,22,0.25) !important;
+    background:#ffffff;
   }
 
   /* Toggle accent */
@@ -90,26 +96,20 @@ st.markdown("""
   }
 
   /* Data tables (high-risk + editor): header band + hover */
-  /* General table header style */
   .stDataFrame thead tr th,
   [data-testid="stTable"] thead tr th,
   [data-testid="stDataEditor"] [role="table"] thead th {
-    background: #fff1e6 !important;
+    background: #fff1e6 !important;        /* orange-50 */
     color: #0f172a !important;
     border-bottom: 1px solid #ffd7b0 !important;
   }
-
-  /* Row hover */
   .stDataFrame tbody tr:hover td,
   [data-testid="stTable"] tbody tr:hover td,
   [data-testid="stDataEditor"] [role="row"]:hover [role="gridcell"] {
-    background: #fff7ed !important;
+    background: #fff7ed !important;         /* orange-50 on hover */
   }
 
-  /* Pills for High-Risk section title */
-  .subdue { color:#64748b; }
-
-  /* Panel dividers for visual rhythm */
+  /* Section cards for nicer framing */
   .section-card {
     background:white; border:1px solid #f1f5f9; border-radius:14px; padding:14px 16px;
     box-shadow:0 4px 12px rgba(0,0,0,0.04);
