@@ -69,7 +69,7 @@ def img_to_data_uri(p: Path) -> str:
     mime = "jpeg" if ext in ("jpg", "jpeg") else "png"
     return f"data:image/{mime};base64,{b64}"
 
-# --- Global styles (includes smaller card images & tighter spacing) ---
+# --- Global styles (smaller card images & tight spacing) ---
 st.markdown(f"""
 <style>
 .stApp {{ background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%); }}
@@ -95,15 +95,16 @@ footer {{ visibility: hidden; }}
 .card + .card {{margin-top:16px;}}
 .card-date {{font-size:11px; color:#64748b; text-transform:uppercase; margin-bottom:6px;}}
 .card-title {{font-size:18px; font-weight:800; margin:0 0 6px 0; color:#0f172a;}}
-.card-text {{font-size:13px; color:#334155; line-height:1.55;}}
+.card-text {{font-size:13px; color:#334155; line-height:1.65;}}
 .card-cta {{margin-top:12px;}}
 
 .card-img-sm img {{
   width: 100%;
-  max-height: 260px;     /* ← smaller & consistent height */
+  max-height: 250px;     /* compact, consistent */
   object-fit: cover;
   border-radius: 12px;
   display: block;
+  margin-top: 6px;
 }}
 
 .full-bleed {{width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw;}}
@@ -155,11 +156,11 @@ st.markdown("""
   <div class="hero-subgrid">
     <div>
       <b>Advanced AI Solutions</b>
-      <div>Our Rekognition-based detection finds missing helmets, vests, and eyewear with production-grade accuracy.</div>
+      <div>Our Rekognition-based models identify missing helmets, vests, and eyewear with production-grade accuracy. The pipeline is tuned for real-world factory conditions and handles glare, motion blur, and cluttered backgrounds. It’s continuously tested against representative images to avoid regressions. As accuracy improves, you benefit automatically—no manual updates required.</div>
     </div>
     <div>
       <b>Real-time Monitoring</b>
-      <div>Each upload triggers automated analysis, alerts, and a tamper-evident record for compliance.</div>
+      <div>Each upload triggers automated analysis, alerts, and a tamper-evident record for compliance. Supervisors receive concise notifications with evidence crops so they can act quickly. All outcomes are written to DynamoDB with timestamps for audit and trend analysis. The result is fewer blind spots and faster intervention when standards slip.</div>
     </div>
   </div>
 </section>
@@ -195,7 +196,7 @@ st.markdown(
     """
 )
 
-# --- Updates / Cards (images smaller, single CTA points to Detect PPE Upload) ---
+# --- Updates / Cards (smaller images; single CTA to Detect PPE Upload) ---
 st.markdown("""
 <div class="section-kicker">
   <span>AI Inspection Updates</span>
@@ -209,7 +210,13 @@ with st.container():
         st.markdown('<div class="card-date">March 10, 2024</div>', unsafe_allow_html=True)
         st.markdown('<div class="card-title">Seamless Integration: Rekognition + Lambda + DynamoDB</div>', unsafe_allow_html=True)
         st.markdown(
-            '<div class="card-text">Uploads to S3 automatically trigger PPE detection, face match, and violation updates with email alerts. The flow is fully serverless and built for scale.</div>',
+            '<div class="card-text">'
+            'Uploads to S3 automatically trigger PPE detection, face matching, and violation updates—no manual steps required. '
+            'A Lambda function orchestrates the workflow, writing results to DynamoDB and pushing alerts through SNS. '
+            'The pipeline is fully serverless, highly resilient, and scales down to zero when idle to minimize cost. '
+            'Configuration is driven by environment variables and IaC, so deployments are repeatable and auditable. '
+            'Security best practices are followed with least-privilege policies and private buckets by default.'
+            '</div>',
             unsafe_allow_html=True
         )
         # Single primary CTA → Detect PPE Upload
@@ -218,28 +225,40 @@ with st.container():
         if CARD_IMG1.exists():
             st.markdown(f'<div class="card-img-sm"><img src="{img_to_data_uri(CARD_IMG1)}"/></div>', unsafe_allow_html=True)
 
-# Card 2 (no extra buttons to keep spacing tight)
+# Card 2
 with st.container():
     col = st.columns([1.1, .9], vertical_alignment="center")
     with col[0]:
         st.markdown('<div class="card-date">February 28, 2024</div>', unsafe_allow_html=True)
         st.markdown('<div class="card-title">Real-Time PPE Detection in Tough Conditions</div>', unsafe_allow_html=True)
         st.markdown(
-            '<div class="card-text">Low light, busy backgrounds, and motion are handled with tuned thresholds. Alerts include cropped evidence for quick action.</div>',
+            '<div class="card-text">'
+            'Low light, reflective surfaces, and motion are handled with tuned thresholds and robust pre-processing. '
+            'Detections include evidence crops so supervisors can verify issues without downloading full images. '
+            'Confidence scores are recorded to support quality reviews and continuous improvement. '
+            'Latency is typically under a second from upload to alert in regional deployments. '
+            'The system is designed to maintain performance even when image quality varies throughout a shift.'
+            '</div>',
             unsafe_allow_html=True
         )
     with col[1]:
         if CARD_IMG2.exists():
             st.markdown(f'<div class="card-img-sm"><img src="{img_to_data_uri(CARD_IMG2)}"/></div>', unsafe_allow_html=True)
 
-# Card 3 (no extra buttons)
+# Card 3
 with st.container():
     col = st.columns([1.1, .9], vertical_alignment="center")
     with col[0]:
         st.markdown('<div class="card-date">January 15, 2024</div>', unsafe_allow_html=True)
         st.markdown('<div class="card-title">Actionable Insights for Supervisors</div>', unsafe_allow_html=True)
         st.markdown(
-            '<div class="card-text">Trend by site, line, and department. Identify repeat offenders and measure time-to-resolution with auditable data.</div>',
+            '<div class="card-text">'
+            'Aggregations by department, site, and line reveal where risks concentrate so training can be targeted. '
+            'Cumulative violation counts highlight repeat offenders and support coaching conversations. '
+            'Timestamps and image keys provide an auditable trail for investigations and compliance reporting. '
+            'Supervisors can adjust thresholds and escalation rules to match local safety policies. '
+            'All data remains within your AWS account to simplify governance and data privacy.'
+            '</div>',
             unsafe_allow_html=True
         )
     with col[1]:
