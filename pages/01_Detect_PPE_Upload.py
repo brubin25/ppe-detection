@@ -294,8 +294,8 @@ with right:
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Total Violations (this image)", total_violations_this_image)
-        m2.metric("PPE Detected", total_detected)
-        m3.metric("Model Confidence", f"{confidence}%" if confidence is not None else "—")
+        # m2.metric("PPE Detected", total_detected)
+        # m3.metric("Model Confidence", f"{confidence}%" if confidence is not None else "—")
 
         st.divider()
 
