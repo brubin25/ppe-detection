@@ -85,9 +85,6 @@ with colL:
     ), unsafe_allow_html=True)
 
     st.write("")
-    st.link_button("➡️ Go to Detect PPE (Upload)", "pages/01_Detect_PPE_Upload.py", type="primary")
-    st.link_button("👥 Employees (Master List)", "pages/02_Employees_Master_List.py")
-    st.link_button("⚠️ Violations", "pages/03_Violations.py")
 
 with colR:
     st.markdown("""
