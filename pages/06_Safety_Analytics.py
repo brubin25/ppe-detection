@@ -18,8 +18,91 @@ st.set_page_config(
     layout="wide",
 )
 
+# -----------------------
+# Global PPE styling (soft orange theme)
+# -----------------------
+st.markdown("""
+<style>
+  /* Soft PPE orange gradient background */
+  .stApp {
+    background: linear-gradient(180deg, #fff7ed 0%, #fff 28%);
+  }
+  footer { visibility: hidden; }
+
+  /* Headings & subheaders subtle tweak */
+  h1, h2, h3, h4 { color: #0f172a; }
+
+  /* KPI metric labels -> safety orange */
+  div[data-testid="stMetric"] div[data-testid="stMetricLabel"] {
+      color: #ea580c !important; /* orange-600 */
+  }
+
+  /* Sidebar controls: borders & focus rings in orange */
+  section[data-testid="stSidebar"] .stMultiSelect,
+  section[data-testid="stSidebar"] .stSelectbox,
+  section[data-testid="stSidebar"] .stSlider,
+  section[data-testid="stSidebar"] .stTextInput {
+    --ring-color: #fb923c22;
+  }
+  section[data-testid="stSidebar"] .stTextInput input,
+  section[data-testid="stSidebar"] .stMultiSelect > div > div,
+  section[data-testid="stSidebar"] .stSelectbox > div > div {
+    border: 1px solid #fed7aa !important;   /* orange-200 */
+    box-shadow: 0 0 0 0px #fff inset !important;
+  }
+  section[data-testid="stSidebar"] .stTextInput input:focus,
+  section[data-testid="stSidebar"] .stMultiSelect:focus-within > div > div,
+  section[data-testid="stSidebar"] .stSelectbox:focus-within > div > div {
+    border: 1px solid #fb923c !important;   /* orange-400 */
+    box-shadow: 0 0 0 3px #fed7aa55 !important;
+  }
+
+  /* Tables: header bar with orange hint */
+  .orange-table thead tr th {
+    background: #fff7ed !important;        /* orange-50 */
+    border-bottom: 1px solid #fed7aa !important;
+  }
+
+  /* Section dividers a bit softer */
+  hr { border: none; border-top: 1px solid #e2e8f0; }
+
+</style>
+""", unsafe_allow_html=True)
+
 st.title("Safety Analytics")
 st.caption("Operational insights across employees and PPE violations (DynamoDB: employee_master & violation_master).")
+
+# -----------------------
+# Altair PPE theme (orange accents)
+# -----------------------
+def ppe_theme():
+    return {
+        "config": {
+            "view": {"continuousWidth": 400, "continuousHeight": 300, "strokeWidth": 0},
+            "axis": {
+                "labelColor": "#0f172a",
+                "titleColor": "#0f172a",
+                "gridColor": "#e2e8f0",
+                "domain": False
+            },
+            "legend": {"labelColor": "#0f172a", "titleColor": "#0f172a"},
+            "range": {
+                # Bars/lines default palette (safety orange forward)
+                "category": [
+                    "#ea580c", "#fb923c", "#f97316", "#f59e0b",
+                    "#d97706", "#fdba74", "#fed7aa", "#78350f"
+                ]
+            },
+            "bar": {"cornerRadiusTopLeft": 4, "cornerRadiusTopRight": 4},
+            "area": {"line": True, "point": False},
+        }
+    }
+
+alt.themes.register("ppe", ppe_theme)
+alt.themes.enable("ppe")
+
+def _theme_chart(chart):
+    return chart.properties(width="container", height=320).configure_view(strokeWidth=0)
 
 # -----------------------
 # AWS config (same style as other pages)
@@ -80,9 +163,9 @@ def load_data():
         it["EmployeeID"] = str(it.get("EmployeeID", ""))
         it["name"]       = it.get("name")
         it["department"] = it.get("department")
-        it["site"]       = it.get("site")           # often "Plant X". If you store "line", we’ll surface it below if present.
-        it["line"]       = it.get("line")           # optional, if present in your table
-        it["job_title"]  = it.get("job_title")      # position
+        it["site"]       = it.get("site")
+        it["line"]       = it.get("line")
+        it["job_title"]  = it.get("job_title")
         it["status"]     = it.get("status", "Active")
         it["created_at"] = it.get("created_at")
     emp_df = pd.DataFrame(emp_items)
@@ -101,7 +184,6 @@ def load_data():
     if not emp_df.empty and not vio_df.empty:
         df = emp_df.merge(vio_df, on="EmployeeID", how="left")
     else:
-        # If no violations, create empty columns to avoid KeyErrors
         df = emp_df.copy()
         if not df.empty and "violations" not in df.columns:
             df["violations"] = 0
@@ -140,7 +222,7 @@ if vio_df.empty:
     st.info("No records in `violation_master` yet.")
 
 # -----------------------
-# Filters
+# Filters (sidebar)
 # -----------------------
 with st.sidebar:
     st.header("Filters")
@@ -176,13 +258,6 @@ st.divider()
 # -----------------------
 # Charts
 # -----------------------
-
-def _theme_chart(chart):
-    """A tiny helper to keep charts consistent."""
-    return chart.properties(width="container", height=320).configure_axis(
-        grid=True, domain=False
-    ).configure_view(strokeWidth=0)
-
 # 1) Violations by Department
 st.subheader("Violations by Department")
 if not view.empty and "department" in view.columns:
@@ -253,14 +328,13 @@ if not view.empty and "last_updated_dt" in view.columns:
     if time_view.empty:
         st.info("No violation updates in the selected window.")
     else:
-        # Expand each row by its count so we can sum by date (or just sum violations on that date)
         time_series = (
             time_view
             .assign(date=time_view["last_updated_dt"].dt.date)
             .groupby("date", as_index=False)["violations"]
             .sum()
         )
-        c4 = alt.Chart(time_series).mark_area().encode(
+        c4 = alt.Chart(time_series).mark_area(opacity=0.85).encode(
             x=alt.X("date:T", title="Date"),
             y=alt.Y("violations:Q", title="Violations (sum)"),
             tooltip=[alt.Tooltip("date:T", title="Date"), alt.Tooltip("violations:Q", title="Violations")]
@@ -286,7 +360,11 @@ if not view.empty:
         tooltip=["EmployeeID", "name", "department", "site", "violations"]
     )
     st.altair_chart(_theme_chart(c5), use_container_width=True)
+
+    # Table with orange header hint
+    st.markdown('<div class="orange-table">', unsafe_allow_html=True)
     st.dataframe(top.reset_index(drop=True), use_container_width=True, hide_index=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("No employee data available for ranking.")
 
