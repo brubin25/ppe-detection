@@ -1,4 +1,4 @@
-# Home.py
+# Home.py (or app.py if this is the main page)
 import streamlit as st
 from pathlib import Path
 import base64
@@ -19,7 +19,8 @@ def _get_qp():
         return st.experimental_get_query_params()
 
 qp = _get_qp()
-if "logout" in qp:
+logout_clicked = ("logout" in qp)
+if logout_clicked:
     st.session_state.clear()
     try:
         st.query_params.clear()
@@ -27,7 +28,7 @@ if "logout" in qp:
         st.experimental_set_query_params()
     st.rerun()
 
-# Hide sidebar if not logged in
+# ✅ Hide sidebar when logged out
 if "id_token" not in st.session_state:
     st.markdown(
         """
@@ -39,19 +40,19 @@ if "id_token" not in st.session_state:
         unsafe_allow_html=True,
     )
 
-# Greet user
+# Greeting
 if "user" in st.session_state:
-    email = st.session_state["user"].get("email", "")
-    name  = st.session_state["user"].get("name", "")
-    display_name = (email.split("@")[0] if email else "") or (name or "User")
+    user_email = st.session_state["user"].get("email", "")
+    user_name  = st.session_state["user"].get("name", "")
+    display_name = (user_email.split("@")[0] if user_email else "") or (user_name or "User")
 else:
     display_name = None
 
-# Assets
-HERO_IMG = Path("images/home1.png")
-CARD_IMG1 = Path("images/home1.png")
-CARD_IMG2 = Path("images/home2.png")
-CARD_IMG3 = Path("images/home3.png")
+# --- Assets ---
+HERO_IMG   = Path("images/home1.png")
+CARD_IMG1  = Path("images/home1.png")
+CARD_IMG2  = Path("images/home2.png")
+CARD_IMG3  = Path("images/home3.png")
 
 SLIDESHOW_IMAGES = [
     Path("images/carousel1.png"),
@@ -60,7 +61,15 @@ SLIDESHOW_IMAGES = [
 ]
 HERO_HEIGHT_PX = 420
 
-# --- Styles ---
+# --- Helpers ---
+def img_to_data_uri(p: Path) -> str:
+    data = p.read_bytes()
+    b64 = base64.b64encode(data).decode("utf-8")
+    ext = p.suffix.replace(".", "").lower()
+    mime = "jpeg" if ext in ("jpg", "jpeg") else "png"
+    return f"data:image/{mime};base64,{b64}"
+
+# --- Global styles (includes smaller card images & tighter spacing) ---
 st.markdown(f"""
 <style>
 .stApp {{ background: radial-gradient(1200px 600px at 10% 10%, #e9f3ff 0%, #f5fbff 40%, #ffffff 100%); }}
@@ -68,37 +77,41 @@ footer {{ visibility: hidden; }}
 
 .greet {{ font-size: 16px; color: #0f172a; margin: 4px 0 8px 2px; }}
 
-.navbar {{
-  display:flex; justify-content:space-between; align-items:center;
-  padding:14px 10px; margin-bottom:6px; width:100%;
-}}
-.nav-link {{ font-weight:600; color:#0f172a; text-decoration:none; padding:6px 8px; border-radius:6px; }}
-.nav-link:hover {{ background:#f1f5f9; }}
+.navbar {{ display: flex; justify-content: space-between; align-items: center; padding: 14px 10px; margin-bottom: 6px; width: 100%; }}
+.nav-left, .nav-right {{ display: flex; align-items: center; gap: 22px; white-space: nowrap; }}
+.nav-link {{ font-weight: 600; color: #0f172a; text-decoration: none; padding: 6px 8px; border-radius: 6px; }}
+.nav-link:hover {{ background: #f1f5f9; }}
 
 .chips {{display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 6px 0;}}
 .chip {{display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; font-size:13px; background:white;}}
-
-.hero {{padding:10px 0 10px 0;}}
+.hero {{padding: 10px 0 20px 0;}}
 .kicker {{letter-spacing:.06em; text-transform:uppercase; font-size:12px; color:#2563eb; font-weight:700;}}
-.h1 {{font-size:38px; line-height:1.15; font-weight:800; color:#0f172a; margin:6px 0;}}
-.hero-subgrid {{display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 6px 0; font-size:14px; color:#334155;}}
+.h1 {{font-size:36px; line-height:1.2; font-weight:800; color:#0f172a; margin:6px 0;}}
+.hero-subgrid {{display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:14px 0 22px 0; font-size:14px; color:#334155;}}
 
-.section-h {{ font-weight:800; font-size:20px; color:#0f172a; margin:20px 0 10px 0; }}
+.section-kicker {{display:flex; align-items:center; gap:10px; color:#2563eb; font-weight:700; font-size:12px; text-transform:uppercase; margin-top:20px;}}
 
-.card {{display:grid; grid-template-columns:1.2fr .8fr; gap:26px; padding:22px; border:1px solid #e5e7eb;
-        border-radius:16px; background:white;}}
+.card {{display:grid; grid-template-columns:1.1fr .9fr; gap:26px; padding:22px; border:1px solid #e5e7eb; border-radius:16px; background:white;}}
 .card + .card {{margin-top:16px;}}
-.card-title {{font-size:20px; font-weight:800; margin:0 0 8px 0; color:#0f172a;}}
-.card-text {{font-size:14px; color:#334155; line-height:1.6;}}
-.card-img {{border-radius:12px; overflow:hidden;}}
-.stButton>button, .stLinkButton>button {{border-radius:10px; padding:8px 12px; font-weight:600;}}
+.card-date {{font-size:11px; color:#64748b; text-transform:uppercase; margin-bottom:6px;}}
+.card-title {{font-size:18px; font-weight:800; margin:0 0 6px 0; color:#0f172a;}}
+.card-text {{font-size:13px; color:#334155; line-height:1.55;}}
+.card-cta {{margin-top:12px;}}
 
-.full-bleed {{width:100vw; position:relative; left:50%; right:50%; margin-left:-50vw; margin-right:-50vw;}}
-.hero-bleed {{
-  width:100vw; height:{HERO_HEIGHT_PX}px; position:relative; overflow:hidden; border-radius:12px;
-  box-shadow:0 6px 18px rgba(0,0,0,.12); background:#000;
+.card-img-sm img {{
+  width: 100%;
+  max-height: 260px;     /* ← smaller & consistent height */
+  object-fit: cover;
+  border-radius: 12px;
+  display: block;
 }}
-.hero-bleed img.fade {{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; animation:fadeShow 9s infinite;}}
+
+.full-bleed {{width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw;}}
+.hero-bleed {{
+  width: 100vw; height: {HERO_HEIGHT_PX}px; position: relative; overflow: hidden;
+  border-radius: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.12); background: #000;
+}}
+.hero-bleed img.fade {{position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; animation: fadeShow 9s infinite;}}
 .hero-bleed img.fade.img2 {{ animation-delay: 3s; }}
 .hero-bleed img.fade.img3 {{ animation-delay: 6s; }}
 @keyframes fadeShow {{ 0%{{opacity:0}} 3%{{opacity:1}} 28%{{opacity:1}} 33%{{opacity:0}} 100%{{opacity:0}} }}
@@ -108,8 +121,10 @@ footer {{ visibility: hidden; }}
 # --- NAVBAR ---
 nav_html = """
 <div class="navbar">
-  <div style="font-weight:800;">🦺 PPE Safety Suite</div>
-  <div>
+  <div class="nav-left">
+    <span style="font-weight:800;">🦺 PPE Safety Suite</span>
+  </div>
+  <div class="nav-right">
 """
 if "id_token" in st.session_state:
     nav_html += """<a class="nav-link" href="?logout">Log out</a>"""
@@ -121,114 +136,112 @@ st.markdown(nav_html, unsafe_allow_html=True)
 # Greeting
 if display_name:
     st.markdown(
-        f'<div class="greet">Welcome back, <strong>{display_name}</strong>.</div>',
+        f'<div class="greet">Welcome back to PPE Safety Suite, <strong>{display_name}</strong>.</div>',
         unsafe_allow_html=True,
     )
 
-# --- HERO ---
+# --- HERO TEXT / CHIPS ---
 st.markdown("""
 <div class="chips">
-  <div class="chip">⚡ Real-time</div>
-  <div class="chip">☁️ 100% AWS</div>
-  <div class="chip">🛡️ Compliance</div>
-  <div class="chip">🤖 Rekognition PPE + Face</div>
+  <div class="chip">⚡ Real-time Processing</div>
+  <div class="chip">☁️ AWS Cloud Integration</div>
+  <div class="chip">🛡️ Enhanced Workplace Safety</div>
+  <div class="chip">🤖 AI/ML Powered</div>
 </div>
+
 <section class="hero">
-  <div class="kicker">Workplace safety, operationalized</div>
-  <div class="h1">AI-Powered PPE Compliance & Violation Tracking</div>
+  <div class="kicker">Revolutionizing Safety with</div>
+  <div class="h1">AI-Powered PPE Detection</div>
   <div class="hero-subgrid">
-    <div><b>Why it matters</b><br/>Reduce incidents, meet regulatory requirements, and build a safety-first culture. The system shortens time-to-response and creates an auditable trail for investigations.</div>
-    <div><b>What it delivers</b><br/>Automatic detection of PPE in images, identity match to your employee directory, violation logging with evidence, and alerts for repeat or critical events.</div>
+    <div>
+      <b>Advanced AI Solutions</b>
+      <div>Our Rekognition-based detection finds missing helmets, vests, and eyewear with production-grade accuracy.</div>
+    </div>
+    <div>
+      <b>Real-time Monitoring</b>
+      <div>Each upload triggers automated analysis, alerts, and a tamper-evident record for compliance.</div>
+    </div>
   </div>
 </section>
 """, unsafe_allow_html=True)
 
-# --- Slideshow ---
-def img_to_data_uri(p: Path) -> str:
-    data = p.read_bytes()
-    b64 = base64.b64encode(data).decode("utf-8")
-    ext = p.suffix.replace(".", "").lower()
-    mime = "jpeg" if ext in ("jpg", "jpeg") else "png"
-    return f"data:image/{mime};base64,{b64}"
-
+# --- Slideshow (kept) ---
 slide_imgs = [p for p in SLIDESHOW_IMAGES if p.exists()]
 if slide_imgs:
-    srcs = [img_to_data_uri(p) for p in slide_imgs]
-    while len(srcs) < 3:  # ensure 3 for animation offsets
-        srcs.append(srcs[-1])
+    sources = [img_to_data_uri(p) for p in slide_imgs]
+    while len(sources) < 3:
+        sources.append(sources[-1])
     st.markdown(f"""
 <div class="full-bleed">
   <div class="hero-bleed">
-    <img class="fade img1" src="{srcs[0]}" alt="slide 1"/>
-    <img class="fade img2" src="{srcs[1]}" alt="slide 2"/>
-    <img class="fade img3" src="{srcs[2]}" alt="slide 3"/>
+    <img class="fade img1" src="{sources[0]}" alt="slide 1"/>
+    <img class="fade img2" src="{sources[1]}" alt="slide 2"/>
+    <img class="fade img3" src="{sources[2]}" alt="slide 3"/>
   </div>
 </div>
 """, unsafe_allow_html=True)
+else:
+    st.info("Add images to `images/carousel1.png`, `images/carousel2.png`, `images/carousel3.png` to drive the slideshow.")
 
 st.write("")
 
-# --- SECTION: Practical Overview (3 cards) ---
-# Card A: Why it’s important
+# --- WHY PPE AUTOMATION MATTERS (professional sentences) ---
+st.markdown("### Why PPE Automation Matters")
+st.markdown(
+    """
+- **Prevent injuries.** Automated checks catch missing PPE before incidents occur.  
+- **Prove compliance.** Every detection is logged with time, image, and outcome to create an auditable record.  
+- **Focus teams.** Alerts surface repeat offenders and rising hotspots so supervisors spend time where it matters.  
+    """
+)
+
+# --- Updates / Cards (images smaller, single CTA points to Detect PPE Upload) ---
+st.markdown("""
+<div class="section-kicker">
+  <span>AI Inspection Updates</span>
+</div>
+""", unsafe_allow_html=True)
+
+# Card 1
 with st.container():
-    col = st.columns([1.05, .95], vertical_alignment="center")
+    col = st.columns([1.1, .9], vertical_alignment="center")
     with col[0]:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="card-title">Why PPE Automation Matters</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-date">March 10, 2024</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-title">Seamless Integration: Rekognition + Lambda + DynamoDB</div>', unsafe_allow_html=True)
         st.markdown(
-            """<div class="card-text">
-- **Prevent injuries** by catching missing helmets, vests, and glasses before accidents happen.<br/>
-- **Prove compliance** with an immutable record of detections and actions.<br/>
-- **Focus teams** with alerts on repeat offenders and locations trending the wrong way.
-</div>""",
-            unsafe_allow_html=True,
+            '<div class="card-text">Uploads to S3 automatically trigger PPE detection, face match, and violation updates with email alerts. The flow is fully serverless and built for scale.</div>',
+            unsafe_allow_html=True
         )
-        st.link_button("Upload a test photo →", "pages/01_Detect_PPE_Upload.py")
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Single primary CTA → Detect PPE Upload
+        st.link_button("Upload Photo Test", "pages/01_Detect_PPE_Upload.py")
     with col[1]:
         if CARD_IMG1.exists():
-            st.image(str(CARD_IMG1), use_container_width=True)
+            st.markdown(f'<div class="card-img-sm"><img src="{img_to_data_uri(CARD_IMG1)}"/></div>', unsafe_allow_html=True)
 
-# Card B: Summary of what it does
+# Card 2 (no extra buttons to keep spacing tight)
 with st.container():
-    col = st.columns([1.05, .95], vertical_alignment="center")
+    col = st.columns([1.1, .9], vertical_alignment="center")
     with col[0]:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="card-title">What the System Does</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-date">February 28, 2024</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-title">Real-Time PPE Detection in Tough Conditions</div>', unsafe_allow_html=True)
         st.markdown(
-            """<div class="card-text">
-- Detects PPE on each person in an image and identifies them against your **employee_master**.<br/>
-- Updates **violation_master** with count, last missing items, timestamp, and image key.<br/>
-- Notifies supervisors via **SNS**; escalates when thresholds are exceeded.
-</div>""",
-            unsafe_allow_html=True,
+            '<div class="card-text">Low light, busy backgrounds, and motion are handled with tuned thresholds. Alerts include cropped evidence for quick action.</div>',
+            unsafe_allow_html=True
         )
-        st.link_button("Review violations →", "pages/03_Violations.py")
-        st.markdown('</div>', unsafe_allow_html=True)
     with col[1]:
         if CARD_IMG2.exists():
-            st.image(str(CARD_IMG2), use_container_width=True)
+            st.markdown(f'<div class="card-img-sm"><img src="{img_to_data_uri(CARD_IMG2)}"/></div>', unsafe_allow_html=True)
 
-# Card C: Technical overview
+# Card 3 (no extra buttons)
 with st.container():
-    col = st.columns([1.05, .95], vertical_alignment="center")
+    col = st.columns([1.1, .9], vertical_alignment="center")
     with col[0]:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="card-title">Technical Overview</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-date">January 15, 2024</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-title">Actionable Insights for Supervisors</div>', unsafe_allow_html=True)
         st.markdown(
-            """<div class="card-text">
-- **S3** triggers **Lambda** on `uploads/` and `employees/` prefixes.<br/>
-- Lambda calls **Rekognition** (PPE + `search_faces_by_image`), writes to **DynamoDB** tables
-  `employee_master` and `violation_master`, and publishes **SNS** alerts.<br/>
-- The Streamlit app reads from **DynamoDB**, uploads images to **S3**, and presents analytics.
-</div>""",
-            unsafe_allow_html=True,
+            '<div class="card-text">Trend by site, line, and department. Identify repeat offenders and measure time-to-resolution with auditable data.</div>',
+            unsafe_allow_html=True
         )
-        # Link to analytics page if present
-        st.link_button("View analytics →", "pages/05_Safety_Intelligence.py")
-        st.markdown('</div>', unsafe_allow_html=True)
     with col[1]:
         if CARD_IMG3.exists():
-            st.image(str(CARD_IMG3), use_container_width=True)
-
-st.write("")
+            st.markdown(f'<div class="card-img-sm"><img src="{img_to_data_uri(CARD_IMG3)}"/></div>', unsafe_allow_html=True)
