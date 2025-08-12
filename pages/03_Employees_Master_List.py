@@ -44,6 +44,35 @@ if _missing:
     st.stop()
 
 st.set_page_config(page_title="Employees (Master List)", page_icon="👥", layout="wide")
+
+# --- PPE-themed styling (warm orange gradient) ---
+st.markdown("""
+<style>
+/* App background: subtle PPE orange glow + warm light gradient */
+.stApp {
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255, 127, 39, 0.10) 0%, transparent 40%),
+    linear-gradient(135deg, #fff7ed 0%, #ffedd5 40%, #ffffff 100%);
+}
+/* Sidebar matches theme */
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+  border-right: 1px solid #f1f5f9;
+}
+/* Primary buttons hover to deeper orange */
+.stButton>button[kind="primary"] {
+  background-color: #f97316;
+  border: 1px solid #fb923c;
+}
+.stButton>button[kind="primary"]:hover {
+  background-color: #ea580c;
+  border-color: #f97316;
+}
+/* Make small chips/headings (if any) feel consistent */
+.small-muted { color:#64748b; font-size:12px; }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("Employees (Master List)")
 st.caption("Directory of employees (DynamoDB: employee_master) with profile photos. Register new employees below.")
 
@@ -259,9 +288,7 @@ def _upsert_employee_profile_to_master(employee_id: str, payload: dict):
     tbl.put_item(Item=item)
 
 st.subheader("Register New Employee")
-st.caption(
-    "Create a new employee profile with ID photo. "
-)
+st.caption("Create a new employee profile with ID photo.")
 
 with st.form("register_employee_form", clear_on_submit=False, border=True):
     cL, cR = st.columns([1.2, 1])
