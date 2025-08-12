@@ -39,7 +39,7 @@ upsert_employee              = _require("upsert_employee", "put_employee", "crea
 
 # ---------- Page UI ----------
 st.set_page_config(page_title="Violations", page_icon="⚠️", layout="wide")
-st.title("⚠️ Violations")
+st.title("⚠Violations")
 st.caption("View and edit aggregated PPE violations (DynamoDB: violation_master). Uploads to S3 (uploads/) will update this table via Lambda.")
 
 # ---------- AWS config ----------
