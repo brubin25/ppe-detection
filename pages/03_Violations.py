@@ -39,8 +39,17 @@ upsert_employee              = _require("upsert_employee", "put_employee", "crea
 
 # ---------- Page UI ----------
 st.set_page_config(page_title="Violations", page_icon="⚠️", layout="wide")
-st.title("⚠Violations")
+st.title("⚠ Violations")
 st.caption("View and edit aggregated PPE violations (DynamoDB: violation_master). Uploads to S3 (uploads/) will update this table via Lambda.")
+
+# Make metric labels red (scoped to this page)
+st.markdown("""
+<style>
+  div[data-testid="stMetric"] div[data-testid="stMetricLabel"] {
+    color: #dc2626 !important; /* red-600 */
+  }
+</style>
+""", unsafe_allow_html=True)
 
 # ---------- AWS config ----------
 AWS_ACCESS_KEY = st.secrets.get("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID", ""))
@@ -131,15 +140,11 @@ def _cached_violations_df():
 # ---------- Toolbar ----------
 bar = st.container()
 with bar:
-    c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+    c1, c2, c3 = st.columns([2, 1, 1])
     query = c1.text_input("Search by EmployeeID or Name", placeholder="e.g., emp01 or Alvin")
     min_v = c2.number_input("Min violations", min_value=0, value=0, step=1)
     sort_desc = c3.toggle("Sort by violations (desc)", value=True)
-    refresh = c4.button("↻ Refresh")
-
-if refresh:
-    st.cache_data.clear()
-    st.rerun()
+    # 🔴 Refresh button removed as requested
 
 df = _cached_violations_df()
 
@@ -162,8 +167,8 @@ view = view.reset_index(drop=True)
 
 # ---------- KPIs ----------
 left_kpi, right_kpi = st.columns(2)
-left_kpi.metric("Employees with violations (view)", len(view))
-right_kpi.metric("Total violations (view)", int(view["violations"].sum()) if not view.empty else 0)
+left_kpi.metric("Employees with violations", len(view))
+right_kpi.metric("Total violations", int(view["violations"].sum()) if not view.empty else 0)
 
 st.divider()
 
@@ -225,7 +230,6 @@ with save_col:
                     _update_violation_count(emp_id, new_val)
                     updated += 1
                 except ClientError as e:
-                    # Most likely IAM AccessDenied — show a clear message
                     st.error(
                         f"Failed to update {emp_id}: {e.response.get('Error',{}).get('Message','Access denied')}. "
                         "Grant dynamodb:UpdateItem on table/violation_master to the app's IAM identity."
@@ -234,6 +238,7 @@ with save_col:
                     st.error(f"Failed to update {emp_id}: {e}")
 
             if updated > 0:
-                st.success(f"Updated {updated} record(s).")
+                st.success(f"Updated {updated} record(s). Saved successfully.")
+                st.toast("Saved successfully ✅", icon="✅")
                 st.cache_data.clear()
                 st.rerun()
